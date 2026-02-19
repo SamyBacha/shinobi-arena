@@ -259,221 +259,24 @@ const WORLD_ENEMIES = {
   },
 };
 
-// Ghost enemy definitions (kept from original)
-const ENEMIES = {
-  Gotoku: {
-    name: 'Gotoku', folder: 'Gotoku',
-    sheets: {
-      idle: { file: 'Idle.png', frames: 5 },
-      walk: { file: 'Walk.png', frames: 6 },
-      run:  { file: 'Run.png',  frames: 7 },
-      attack1: { file: 'Attack_1.png', frames: 4 },
-      hurt: { file: 'Hurt.png', frames: 3 },
-      dead: { file: 'Dead.png', frames: 5 },
-      scream: { file: 'Scream.png', frames: 4 },
-    }
-  },
-  Onre: {
-    name: 'Onre', folder: 'Onre',
-    sheets: {
-      idle: { file: 'Idle.png', frames: 6 },
-      walk: { file: 'Walk.png', frames: 7 },
-      run:  { file: 'Run.png',  frames: 7 },
-      attack1: { file: 'Attack_1.png', frames: 5 },
-      hurt: { file: 'Hurt.png', frames: 3 },
-      dead: { file: 'Dead.png', frames: 6 },
-      scream: { file: 'Scream.png', frames: 7 },
-    }
-  },
-  Yurei: {
-    name: 'Yurei', folder: 'Yurei',
-    sheets: {
-      idle: { file: 'Idle.png', frames: 5 },
-      walk: { file: 'Walk.png', frames: 5 },
-      run:  { file: 'Run.png',  frames: 5 },
-      attack1: { file: 'Attack_1.png', frames: 4 },
-      hurt: { file: 'Hurt.png', frames: 3 },
-      dead: { file: 'Dead.png', frames: 4 },
-      scream: { file: 'Scream.png', frames: 4 },
-    }
-  }
-};
 
-// Character definitions
+// Character definitions — instances des classes définies dans CharacterDef.js
 const CHARACTERS = {
-  Fighter: {
-    name: 'Fighter',
-    folder: 'Fighter',
-    color: '#e88a36',
-    trait: 'extra_life',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 6 },
-      walk:    { file: 'Walk.png',     frames: 8 },
-      run:     { file: 'Run.png',      frames: 8 },
-      jump:    { file: 'Jump.png',     frames: 10 },
-      attack1: { file: 'Attack_1.png', frames: 4 },
-      attack2: { file: 'Attack_2.png', frames: 3 },
-      attack3: { file: 'Attack_3.png', frames: 4 },
-      dead:    { file: 'Dead.png',     frames: 3 },
-      hurt:    { file: 'Hurt.png',     frames: 3 },
-      shield:  { file: 'Shield.png',   frames: 2 },
-    }
-  },
-  Samurai: {
-    name: 'Samurai',
-    folder: 'Samurai',
-    color: '#7a6aaf',
-    trait: 'attack_x4',
-    attackChain: ['attack1', 'attack2', 'attack3', 'attack1'],
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 6 },
-      walk:    { file: 'Walk.png',     frames: 8 },
-      run:     { file: 'Run.png',      frames: 8 },
-      jump:    { file: 'Jump.png',     frames: 12 },
-      attack1: { file: 'Attack_1.png', frames: 6 },
-      attack2: { file: 'Attack_2.png', frames: 4 },
-      attack3: { file: 'Attack_3.png', frames: 3 },
-      dead:    { file: 'Dead.png',     frames: 3 },
-      hurt:    { file: 'Hurt.png',     frames: 2 },
-      shield:  { file: 'Shield.png',   frames: 2 },
-    }
-  },
-  Shinobi: {
-    name: 'Shinobi',
-    folder: 'Shinobi',
-    color: '#cc4444',
-    trait: 'counter',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 6 },
-      walk:    { file: 'Walk.png',     frames: 8 },
-      run:     { file: 'Run.png',      frames: 8 },
-      jump:    { file: 'Jump.png',     frames: 12 },
-      attack1: { file: 'Attack_1.png', frames: 5 },
-      attack2: { file: 'Attack_2.png', frames: 3 },
-      attack3: { file: 'Attack_3.png', frames: 4 },
-      dead:    { file: 'Dead.png',     frames: 4 },
-      hurt:    { file: 'Hurt.png',     frames: 2 },
-      shield:  { file: 'Shield.png',   frames: 4 },
-    }
-  },
+  Fighter:  new FighterCharacter(),
+  Samurai:  new SamuraiCharacter(),
+  Shinobi:  new ShinobiCharacter(),
 };
 
 // Hidden characters – unlocked via cheat codes
 const HIDDEN_CHARACTERS = {
-  Kunoichi: {
-    name: 'Kunoichi',
-    folder: 'Kunoichi',
-    color: '#e85d9a',
-    imgBase: NINJA_IMG_BASE,
-    trait: 'mimicry',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 9 },
-      walk:    { file: 'Walk.png',     frames: 8 },
-      run:     { file: 'Run.png',      frames: 8 },
-      jump:    { file: 'Jump.png',     frames: 10 },
-      attack1: { file: 'Attack_1.png', frames: 6 },
-      attack2: { file: 'Attack_2.png', frames: 8 },
-      attack3: { file: 'Attack_2.png', frames: 8 },
-      dead:    { file: 'Dead.png',     frames: 5 },
-      hurt:    { file: 'Hurt.png',     frames: 2 },
-      shield:  { file: 'Jump.png',     frames: 10 },
-    }
-  },
-  Ninja_Peasant: {
-    name: 'Peasant',
-    folder: 'Ninja_Peasant',
-    color: '#8bc34a',
-    imgBase: NINJA_IMG_BASE,
-    frameSize: 96,
-    duelScale: 0.85,
-    selectOffsetY: 20,
-    trait: 'disguise',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 6 },
-      walk:    { file: 'Walk.png',     frames: 8 },
-      run:     { file: 'Run.png',      frames: 6 },
-      jump:    { file: 'Jump.png',     frames: 8 },
-      attack1: { file: 'Attack_1.png', frames: 6 },
-      attack2: { file: 'Attack_2.png', frames: 4 },
-      attack3: { file: 'Attack_2.png', frames: 4 },
-      dead:    { file: 'Dead.png',     frames: 4 },
-      hurt:    { file: 'Hurt.png',     frames: 2 },
-      shield:  { file: 'Disguise.png', frames: 9 },
-    }
-  },
-  Wanderer_Magician: {
-    name: 'Magician',
-    folder: 'Wanderer Magican',
-    color: '#55bbff',
-    imgBase: WIZARD_IMG_BASE,
-    duelScale: 1.4,
-    trait: 'magic_shield',
-    projectile: { sheet: 'charge1', frameSize: 64, frames: 9 },
-    sheets: {
-      idle:          { file: 'Idle.png',         frames: 8 },
-      walk:          { file: 'Walk.png',         frames: 7 },
-      run:           { file: 'Run.png',          frames: 8 },
-      jump:          { file: 'Jump.png',         frames: 8 },
-      attack1:       { file: 'Attack_1.png',     frames: 7 },
-      attack2:       { file: 'Attack_2.png',     frames: 9 },
-      attack3:       { file: 'Attack_2.png',     frames: 9 },
-      dead:          { file: 'Dead.png',         frames: 4 },
-      hurt:          { file: 'Hurt.png',         frames: 4 },
-      shield:        { file: 'Magic_arrow.png',   frames: 6 },
-      magic_sphere:  { file: 'Magic_sphere.png', frames: 16 },
-      charge1:       { file: 'Charge_1.png',     frames: 9 },
-    }
-  }
+  Kunoichi:          new KunoichiCharacter(),
+  Ninja_Peasant:     new NinjaPeasantCharacter(),
+  Wanderer_Magician: new WandererMagicianCharacter(),
 };
 
 // Ghost characters (duel-compatible, AI opponents only)
 const GHOST_CHARACTERS = {
-  Gotoku: {
-    name: 'Gotoku', folder: 'Gotoku', color: '#66ccaa',
-    imgBase: ENEMY_IMG_BASE,
-    trait: 'jump_dodge',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 5 },
-      run:     { file: 'Run.png',      frames: 7 },
-      jump:    { file: 'Jump.png',     frames: 8 },
-      attack1: { file: 'Attack_1.png', frames: 4 },
-      attack2: { file: 'Attack_2.png', frames: 4 },
-      attack3: { file: 'Attack_3.png', frames: 4 },
-      hurt:    { file: 'Hurt.png',     frames: 3 },
-      dead:    { file: 'Dead.png',     frames: 5 },
-      shield:  { file: 'Scream.png',   frames: 4 },
-    }
-  },
-  Onre: {
-    name: 'Onre', folder: 'Onre', color: '#cc77ff',
-    imgBase: ENEMY_IMG_BASE,
-    trait: 'flight',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 6 },
-      walk:    { file: 'Walk.png',     frames: 7 },
-      run:     { file: 'Run.png',      frames: 7 },
-      attack1: { file: 'Attack_1.png', frames: 5 },
-      attack2: { file: 'Attack_2.png', frames: 4 },
-      attack3: { file: 'Attack_3.png', frames: 4 },
-      hurt:    { file: 'Hurt.png',     frames: 3 },
-      dead:    { file: 'Dead.png',     frames: 6 },
-      shield:  { file: 'Scream.png',   frames: 7 },
-      flight:  { file: 'Flight.png',   frames: 6 },
-    }
-  },
-  Yurei: {
-    name: 'Yurei', folder: 'Yurei', color: '#55aadd',
-    imgBase: ENEMY_IMG_BASE,
-    trait: 'double_charge',
-    sheets: {
-      idle:    { file: 'Idle.png',     frames: 5 },
-      run:     { file: 'Run.png',      frames: 5 },
-      attack1: { file: 'Attack_1.png', frames: 4 },
-      attack2: { file: 'Attack_2.png', frames: 4 },
-      attack3: { file: 'Attack_3.png', frames: 7 },
-      hurt:    { file: 'Hurt.png',     frames: 3 },
-      dead:    { file: 'Dead.png',     frames: 4 },
-      shield:  { file: 'Scream.png',   frames: 4 },
-    }
-  }
+  Gotoku: new GotokuCharacter(),
+  Onre:   new OnreCharacter(),
+  Yurei:  new YureiCharacter(),
 };

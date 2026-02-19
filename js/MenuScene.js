@@ -6,13 +6,13 @@ class MenuScene extends Phaser.Scene {
 
   preload() {
     if (!this.cache.audio.exists('menu_bgm')) {
-      this.load.audio('menu_bgm', 'music/Main Menu Song Theme Samurai Warriors 5.mp3');
+      this.load.audio('menu_bgm', 'music/bgm_menu.mp3');
     }
     if (!this.cache.audio.exists('menu_nav')) {
-      this.load.audio('menu_nav', 'music/freesound_community-menu-button-88360.mp3');
+      this.load.audio('menu_nav', 'music/sfx_menu_nav.mp3');
     }
     if (!this.cache.audio.exists('menu_click')) {
-      this.load.audio('menu_click', 'music/freesound_community-menu-click-89198.mp3');
+      this.load.audio('menu_click', 'music/sfx_menu_click.mp3');
     }
 
     // Preload idle spritesheets for all characters (miniatures in Options)
@@ -20,10 +20,8 @@ class MenuScene extends Phaser.Scene {
     allChars.forEach(charDef => {
       const loadKey = 'menu_' + charDef.folder + '_idle';
       if (!this.textures.exists(loadKey)) {
-        const base = (charDef.imgBase || IMG_BASE) + charDef.folder + '/';
-        const fs = charDef.frameSize || FRAME_SIZE;
-        this.load.spritesheet(loadKey, base + charDef.sheets.idle.file, {
-          frameWidth: fs, frameHeight: fs
+        this.load.spritesheet(loadKey, charDef.assetFolder + charDef.sheets.idle.file, {
+          frameWidth: charDef.frameSize, frameHeight: charDef.frameSize
         });
       }
     });
@@ -481,9 +479,8 @@ class MenuScene extends Phaser.Scene {
       const spriteKey = 'menu_' + charDef.folder + '_idle';
       let miniSpr = null;
       if (this.textures.exists(spriteKey)) {
-        const fs = charDef.frameSize || FRAME_SIZE;
         miniSpr = this.add.sprite(listX + 22, iy + listItemH / 2, spriteKey, 0)
-          .setScale(0.28 * (FRAME_SIZE / fs)).setDepth(503);
+          .setScale(0.28 * (FRAME_SIZE / charDef.frameSize)).setDepth(503);
         this.personnagesObjects.push(miniSpr);
       }
 
@@ -674,8 +671,7 @@ class MenuScene extends Phaser.Scene {
     if (!queue.length) return;
 
     const spriteKey = 'menu_' + charDef.folder + '_idle';
-    const fs = charDef.frameSize || FRAME_SIZE;
-    const scale = 1.8 * (FRAME_SIZE / fs);
+    const scale = 1.8 * (FRAME_SIZE / charDef.frameSize);
 
     let queueIndex = 0;
 
@@ -692,9 +688,8 @@ class MenuScene extends Phaser.Scene {
 
       // Lazy-load the sheet if not already loaded
       if (!this.textures.exists(sheetKey)) {
-        const base = (charDef.imgBase || IMG_BASE) + charDef.folder + '/';
         const sheet = charDef.sheets[entry.key];
-        this.load.spritesheet(sheetKey, base + sheet.file, { frameWidth: fs, frameHeight: fs });
+        this.load.spritesheet(sheetKey, charDef.assetFolder + sheet.file, { frameWidth: charDef.frameSize, frameHeight: charDef.frameSize });
         this.load.once('complete', () => {
           if (!this.showingPersonnages) return;
           if (this.persoChars[this.persoSelectedIndex] !== charDef) return;

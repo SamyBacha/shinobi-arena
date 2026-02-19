@@ -2,9 +2,9 @@
 // Game config
 // ============================================================
 loadSettings();
+initScenes();
 
-loadGifScenes().then(() => {
-  const config = {
+const config = {
     type: Phaser.AUTO,
     parent: 'game',
     width: 1280,
@@ -25,5 +25,4 @@ loadGifScenes().then(() => {
     }
   };
 
-  new Phaser.Game(config);
-});
+new Phaser.Game(config);
