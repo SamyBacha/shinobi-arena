@@ -126,6 +126,9 @@ class DuelScene extends Phaser.Scene {
     if (!this.cache.audio.exists('peasant_special')) {
       this.load.audio('peasant_special', peasant.voicesFolder + 'Peasant_special_ability.mp3');
     }
+    if (!this.cache.audio.exists('magic_spell')) {
+      this.load.audio('magic_spell', 'music/sfx_elemental-magic-spell-impact-outgoing.mp3');
+    }
 
     // Character voices — fichiers optionnels dans {voicesFolder}/{folder}_{event}.mp3
     [this.p1Def, this.p2Def].forEach(charDef => {
@@ -1302,6 +1305,7 @@ class DuelScene extends Phaser.Scene {
       });
       // Spawn projectile and tween toward opponent
       this.time.delayedCall(magicProjectileDelay, () => {
+        this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
         const projKey = 'duel_' + this.p1Def.folder + '_' + this.p1Def.projectile.sheet;
         const proj = this.add.sprite(p1StartX + 80, this.p1Sprite.y - 40, projKey, 0);
         proj.setScale(DUEL_PLAYER_SCALE);
@@ -1326,6 +1330,7 @@ class DuelScene extends Phaser.Scene {
         }
       });
       this.time.delayedCall(magicProjectileDelay, () => {
+        this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
         const projKey = 'duel_' + this.p2Def.folder + '_' + this.p2Def.projectile.sheet;
         const proj = this.add.sprite(p2StartX - 80, this.p2Sprite.y - 40, projKey, 0);
         proj.setScale(DUEL_PLAYER_SCALE);
