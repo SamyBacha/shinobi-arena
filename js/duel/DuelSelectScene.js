@@ -12,11 +12,25 @@ class DuelSelectScene extends Phaser.Scene {
   }
 
   preload() {
-    [...Object.values(CHARACTERS), ...Object.values(GHOST_CHARACTERS), ...Object.values(HIDDEN_CHARACTERS)].forEach(char => {
+    const allChars = [...Object.values(CHARACTERS), ...Object.values(GHOST_CHARACTERS), ...Object.values(HIDDEN_CHARACTERS)];
+    allChars.forEach(char => {
       const key = 'select_' + char.folder + '_idle';
       if (!this.textures.exists(key)) {
         this.load.spritesheet(key, char.assetFolder + 'Idle.png', {
           frameWidth: char.frameSize, frameHeight: char.frameSize
+        });
+      }
+      // Preload outfit idle sprites for characters with alternate outfits
+      if (char._outfits) {
+        char._outfits.forEach(outfit => {
+          if (!outfit.folder) return;
+          const folderKey = outfit.folder.replace(/[^a-zA-Z0-9_]/g, '_');
+          const outfitKey = 'select_outfit_' + folderKey + '_idle';
+          if (!this.textures.exists(outfitKey)) {
+            this.load.spritesheet(outfitKey, outfit.folder + 'Idle.png', {
+              frameWidth: char.frameSize, frameHeight: char.frameSize
+            });
+          }
         });
       }
     });
@@ -50,11 +64,13 @@ class DuelSelectScene extends Phaser.Scene {
     this.selectBgm = this.sound.add('duel_select_bgm', { loop: true, volume: AUDIO_SETTINGS.musicVolume });
     this.selectBgm.play();
 
-    this.phase = 'mode'; // 'mode' | 'p1' | 'p2' | 'stage'
+    this.phase = 'mode'; // 'mode' | 'p1' | 'p1outfit' | 'p2' | 'p2outfit' | 'stage'
     this.vsAI   = false;
     this.arcade = false;
     this.p1Char = null;
     this.p2Char = null;
+    this.p1Outfit = null;
+    this.p2Outfit = null;
     this.selectedIndex = 0;
     this.selectedStage = null;
     this.confirmed = false;
@@ -255,6 +271,157 @@ class DuelSelectScene extends Phaser.Scene {
     this.dynamicObjects.push(hint);
 
     this._layoutCarousel();
+  }
+
+  showOutfitSelect(player) {
+    this.clearDynamic();
+    this.phase = player + 'outfit'; // 'p1outfit' or 'p2outfit'
+    this.selectedIndex = 0;
+    this.confirmed = false;
+    this._phaseChanged = true;
+
+    const charDef = player === 'p1' ? this.p1Char : this.p2Char;
+    this._outfitPlayer = player;
+    this._outfitChars = charDef.outfits; // [{ name, folder? }, ...]
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const playerColor = player === 'p1' ? '#44bbff' : (this.vsAI && !this.arcade ? '#ff8844' : '#ff4466');
+    const label = player === 'p1' ? 'JOUEUR 1 — CHOISISSEZ UN OUTFIT' : 'JOUEUR 2 — CHOISISSEZ UN OUTFIT';
+
+    const title = this.add.text(w / 2, h * 0.10, label, {
+      fontSize: '28px', fontFamily: 'monospace', color: playerColor,
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5);
+    this.dynamicObjects.push(title);
+
+    const cy = h * 0.50;
+    const cx = w / 2;
+    this._outfitCY = cy;
+    this._outfitCX = cx;
+    this.outfitPreviews = [];
+
+    this._outfitChars.forEach((outfit, idx) => {
+      // Texture key for this outfit's idle sprite
+      let texKey;
+      if (outfit.folder) {
+        const folderKey = outfit.folder.replace(/[^a-zA-Z0-9_]/g, '_');
+        texKey = 'select_outfit_' + folderKey + '_idle';
+        // Fallback to default if not loaded (shouldn't happen since preloaded above)
+        if (!this.textures.exists(texKey)) texKey = 'select_' + charDef.folder + '_idle';
+      } else {
+        texKey = 'select_' + charDef.folder + '_idle';
+      }
+
+      const animKey = 'outfit_anim_' + idx + '_' + charDef.folder;
+      if (!this.anims.exists(animKey)) {
+        this.anims.create({
+          key: animKey,
+          frames: this.anims.generateFrameNumbers(texKey, {
+            start: 0, end: charDef.sheets.idle.frames - 1,
+          }),
+          frameRate: 8, repeat: -1,
+        });
+      }
+
+      const baseScale = (FRAME_SIZE / charDef.frameSize) * charDef.duelScale;
+      const sprite = this.add.sprite(cx, cy, texKey, 0);
+      sprite.setOrigin(0.5, 0.75);
+      sprite.play(animKey);
+      this.dynamicObjects.push(sprite);
+      this.outfitPreviews.push({ sprite, outfit, baseScale });
+    });
+
+    // Frame
+    const frameW = 180, frameH = 240;
+    this._outfitFrame = this.add.graphics().setDepth(5);
+    this.dynamicObjects.push(this._outfitFrame);
+    this._outfitFrameW = frameW;
+    this._outfitFrameH = frameH;
+
+    // Outfit name
+    this._outfitName = this.add.text(cx, h * 0.70, '', {
+      fontSize: '26px', fontFamily: 'monospace', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(10);
+    this.dynamicObjects.push(this._outfitName);
+
+    // Arrows
+    const arrowL = this.add.text(w * 0.12, cy - 20, '◀', {
+      fontSize: '36px', fontFamily: 'monospace', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(10).setInteractive({ useHandCursor: true });
+    arrowL.on('pointerdown', () => this._outfitNav(-1));
+    this.dynamicObjects.push(arrowL);
+
+    const arrowR = this.add.text(w * 0.88, cy - 20, '▶', {
+      fontSize: '36px', fontFamily: 'monospace', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(10).setInteractive({ useHandCursor: true });
+    arrowR.on('pointerdown', () => this._outfitNav(1));
+    this.dynamicObjects.push(arrowR);
+
+    const hint = this.add.text(w / 2, h * 0.88, '←→ : Naviguer  |  ENTER : Valider  |  ESC : Retour', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#555577',
+    }).setOrigin(0.5);
+    this.dynamicObjects.push(hint);
+
+    this._layoutOutfitCarousel();
+  }
+
+  _outfitNav(dir) {
+    if (this.confirmed) return;
+    const n = this._outfitChars.length;
+    this.selectedIndex = (this.selectedIndex + dir + n) % n;
+    this.sound.play('menu_nav', { volume: AUDIO_SETTINGS.sfxVolume });
+    this._layoutOutfitCarousel();
+  }
+
+  _layoutOutfitCarousel() {
+    const n  = this._outfitChars.length;
+    const cx = this._outfitCX;
+    const cy = this._outfitCY;
+
+    const slots    = [-1, 0, 1];
+    const slotX    = [cx - 220, cx, cx + 220];
+    const slotScale= [1.1, 2.2, 1.1];
+    const slotAlpha= [0.5, 1.0, 0.5];
+    const slotDepth= [2,   4,   2  ];
+
+    this.outfitPreviews.forEach((p, i) => {
+      let dist = i - this.selectedIndex;
+      if (dist >  n / 2) dist -= n;
+      if (dist < -n / 2) dist += n;
+
+      const slotIdx = slots.indexOf(dist);
+      if (slotIdx === -1) { p.sprite.setVisible(false); return; }
+
+      p.sprite.setVisible(true);
+      const targetScale = slotScale[slotIdx] * p.baseScale;
+      this.tweens.add({
+        targets: p.sprite,
+        x: slotX[slotIdx], scaleX: targetScale, scaleY: targetScale, alpha: slotAlpha[slotIdx],
+        duration: 180, ease: 'Power2',
+      });
+      p.sprite.setDepth(slotDepth[slotIdx]);
+    });
+
+    // Frame around center outfit
+    const outfit = this._outfitChars[this.selectedIndex];
+    const charDef = this._outfitPlayer === 'p1' ? this.p1Char : this.p2Char;
+    if (this._outfitFrame && this._outfitFrameW) {
+      const fw = this._outfitFrameW;
+      const fh = this._outfitFrameH;
+      const charColor = Phaser.Display.Color.HexStringToColor(charDef.color).color;
+      this._outfitFrame.clear();
+      this._outfitFrame.fillStyle(0x000000, 0.25);
+      this._outfitFrame.fillRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
+      this._outfitFrame.lineStyle(3, charColor, 0.9);
+      this._outfitFrame.strokeRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
+    }
+    if (this._outfitName) {
+      this._outfitName.setText(outfit.name.toUpperCase()).setColor(charDef.color);
+    }
   }
 
   _carouselNav(dir) {
@@ -532,8 +699,17 @@ class DuelSelectScene extends Phaser.Scene {
       if (this.detailVisible) { this.hideDetail(); return; }
       if (this.phase === 'mode') { this.stopSelectMusic(); this.scene.start('MenuScene'); return; }
       if (this.phase === 'p1') { this.showModeSelect(); return; }
-      if (this.phase === 'p2') { this.showCharSelect('p1'); return; }
-      if (this.phase === 'stage') { this.showCharSelect('p2'); return; }
+      if (this.phase === 'p1outfit') { this.showCharSelect('p1'); return; }
+      if (this.phase === 'p2') {
+        if (this.p1Char && this.p1Char.outfits.length > 1) { this.showOutfitSelect('p1'); return; }
+        this.showCharSelect('p1'); return;
+      }
+      if (this.phase === 'p2outfit') { this.showCharSelect('p2'); return; }
+      if (this.phase === 'stage') {
+        // Go back to p2 outfit if p2 has outfits, else go back to p2 char select
+        if (this.p2Char && this.p2Char.outfits.length > 1) { this.showOutfitSelect('p2'); return; }
+        this.showCharSelect('p2'); return;
+      }
     }
 
     if (this.phase === 'mode') {
@@ -562,6 +738,7 @@ class DuelSelectScene extends Phaser.Scene {
         const chosen = this._carouselChars[this.selectedIndex];
         if (this.phase === 'p1') {
           this.p1Char = chosen;
+          this.p1Outfit = null;
           if (this.arcade) {
             // AVENTURE : ordre arcade fixe, l'IA gère les adversaires
             const allChars = { ...CHARACTERS, ...GHOST_CHARACTERS, ...HIDDEN_CHARACTERS };
@@ -576,15 +753,40 @@ class DuelSelectScene extends Phaser.Scene {
                 .map(k => allChars[k]);
             }
             this.p2Char = arcadeOpponents[0];
+            this.p2Outfit = null;
             this.arcadeOpponents = arcadeOpponents;
             this.launchDuel();
           } else {
-            // JOUEUR vs IA ou PvP : J1 a choisi, on passe à P2
-            this.showCharSelect('p2');
+            // Si le perso a plus d'un outfit, proposer le choix
+            if (chosen.outfits.length > 1) {
+              this.showOutfitSelect('p1');
+            } else {
+              this.showCharSelect('p2');
+            }
           }
         } else {
           // P2 choisi (par J1 en vsAI ou par J2 en PvP)
           this.p2Char = chosen;
+          this.p2Outfit = null;
+          if (chosen.outfits.length > 1) {
+            this.showOutfitSelect('p2');
+          } else {
+            this.showStageSelect();
+          }
+        }
+      }
+    } else if (this.phase === 'p1outfit' || this.phase === 'p2outfit') {
+      if (Phaser.Input.Keyboard.JustDown(this.keyRight)) this._outfitNav(1);
+      if (Phaser.Input.Keyboard.JustDown(this.keyLeft))  this._outfitNav(-1);
+
+      if (Phaser.Input.Keyboard.JustDown(this.keyEnter)) {
+        this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        const chosen = this._outfitChars[this.selectedIndex];
+        if (this.phase === 'p1outfit') {
+          this.p1Outfit = chosen.folder ? chosen : null; // null = default
+          this.showCharSelect('p2');
+        } else {
+          this.p2Outfit = chosen.folder ? chosen : null;
           this.showStageSelect();
         }
       }
@@ -613,6 +815,8 @@ class DuelSelectScene extends Phaser.Scene {
       const data = {
         p1: this.p1Char,
         p2: this.p2Char,
+        p1Outfit: this.p1Outfit || null,
+        p2Outfit: this.p2Outfit || null,
         vsAI: this.vsAI,
         stageIndex: this.selectedStage || null
       };

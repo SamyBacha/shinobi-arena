@@ -18,6 +18,7 @@ class CharacterDef {
     projectile    = null,
     sfxStyle      = 'sword',  // 'sword' | 'punch'
     fx            = null,     // { attack1, attack2, attack3, special } — chemins relatifs à fxFolder
+    outfits       = null,     // [{ name: 'Default' }, { name: 'Fire Wizard', folder: '...' }, ...]
   }) {
     this.name          = name;
     this.folder        = folder;
@@ -33,6 +34,7 @@ class CharacterDef {
     this.projectile    = projectile;
     this.sfxStyle      = sfxStyle;
     this._fx           = fx;
+    this._outfits      = outfits;
   }
 
   // Chemin de base des assets image
@@ -55,6 +57,11 @@ class CharacterDef {
   // Dossier racine pour les FX du personnage (les sous-dossiers fx/slash/ etc. sont dans info.folder)
   get fxFolder() {
     return this.assetFolder;
+  }
+
+  // Outfits alternatifs (toujours au moins [{ name: 'Default' }])
+  get outfits() {
+    return this._outfits || [{ name: 'Default' }];
   }
 
   // FX d'attaque déclarés par le personnage

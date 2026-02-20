@@ -19,7 +19,16 @@ class WandererMagicianCharacter extends CharacterDef {
       },
       duelScale:  1.4,
       trait:      'magic_shield',
-      projectile: { sheet: 'charge1', frameSize: 64, frames: 9 },
+      outfits: [
+        { name: 'Default' },
+        { name: 'Fire Wizard',    folder: 'js/characters/Wanderer_Magician/img/outfit_2/Fire Wizard/',
+          sheets: { magic_sphere: { file: 'Magic_sphere.png', frames: 8  },
+                    charge1:      { file: 'Charge_1.png',     frames: 12, frameSize: 64 } } },
+        { name: 'Lightning Mage', folder: 'js/characters/Wanderer_Magician/img/outfit_3/Lightning Mage/',
+          sheets: { magic_sphere: { file: 'Magic_sphere.png', frames: 7  },
+                    charge1:      { file: 'Charge_1.png',     frames: 10, frameSize: 64 } } },
+      ],
+      projectile: { sheet: 'charge1', frameSize: 128, frames: 4 },
       sheets: {
         idle:         { file: 'Idle.png',         frames: 8 },
         walk:         { file: 'Walk.png',         frames: 7 },
@@ -30,9 +39,9 @@ class WandererMagicianCharacter extends CharacterDef {
         attack3:      { file: 'Attack_2.png',     frames: 9 },
         dead:         { file: 'Dead.png',         frames: 4 },
         hurt:         { file: 'Hurt.png',         frames: 4 },
-        shield:       { file: 'Magic_arrow.png',  frames: 6 },
+        shield:       { file: 'Shield.png',         frames: 6 },
         magic_sphere: { file: 'Magic_sphere.png', frames: 16 },
-        charge1:      { file: 'Charge_1.png',     frames: 9 },
+        charge1:      { file: 'Charge_1.png',     frames: 4 },
       },
     });
   }

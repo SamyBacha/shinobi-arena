@@ -110,7 +110,7 @@ const TRAIT_LABELS = {
   },
   magic_shield: {
     short: 'Garde Arcanique',
-    desc: 'Protéger recharge 1 charge. Recharger avec ≥3 charges = attaque spéciale à distance (transperce la garde, +1 vie). Max Frapper x2.',
+    desc: 'Protéger si attaqué : +1 charge + contre-attaque magique (-1 vie attaquant, coûte 1 charge). Recharger avec ≥3 charges = attaque spéciale (perce garde, +1 vie). Max Frapper x2.',
   },
 };
 
