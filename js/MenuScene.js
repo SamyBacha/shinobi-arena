@@ -230,6 +230,7 @@ class MenuScene extends Phaser.Scene {
       CHEAT_SETTINGS.ghostsUnlocked  = true;
       CHEAT_SETTINGS.magikUnlocked   = true;
       CHEAT_SETTINGS.villageUnlocked = true;
+      CHEAT_SETTINGS.yokaiUnlocked   = true;
       this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
       this.showCheatUnlock('TOUT DÉBLOQUÉ !', 'TOUT DÉBLOQUÉ');
       this.deactivateCheatInput();
@@ -254,6 +255,11 @@ class MenuScene extends Phaser.Scene {
       CHEAT_SETTINGS.villageUnlocked = true;
       this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
       this.showCheatUnlock('VILLAGE DÉBLOQUÉ !', 'VILLAGE DÉBLOQUÉ');
+      this.deactivateCheatInput();
+    } else if (this.cheatBuffer === 'yokai' && !CHEAT_SETTINGS.yokaiUnlocked) {
+      CHEAT_SETTINGS.yokaiUnlocked = true;
+      this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+      this.showCheatUnlock('YOKAI DÉBLOQUÉ !', 'YOKAI DÉBLOQUÉ');
       this.deactivateCheatInput();
     } else if (this.cheatBuffer) {
       // Wrong code — flash red then close after delay
@@ -462,6 +468,7 @@ class MenuScene extends Phaser.Scene {
       ...(CHEAT_SETTINGS.ghostsUnlocked ? Object.values(GHOST_CHARACTERS) : []),
       ...(CHEAT_SETTINGS.villageUnlocked ? [HIDDEN_CHARACTERS.Kunoichi, HIDDEN_CHARACTERS.Ninja_Peasant] : []),
       ...(CHEAT_SETTINGS.magikUnlocked ? [HIDDEN_CHARACTERS.Wanderer_Magician] : []),
+      ...(CHEAT_SETTINGS.yokaiUnlocked ? [HIDDEN_CHARACTERS.Yokai] : []),
     ];
 
     // ── LEFT: character list ──

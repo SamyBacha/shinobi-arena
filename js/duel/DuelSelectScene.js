@@ -187,6 +187,7 @@ class DuelSelectScene extends Phaser.Scene {
       ...(CHEAT_SETTINGS.ghostsUnlocked ? Object.values(GHOST_CHARACTERS) : []),
       ...(CHEAT_SETTINGS.villageUnlocked ? [HIDDEN_CHARACTERS.Kunoichi, HIDDEN_CHARACTERS.Ninja_Peasant] : []),
       ...(CHEAT_SETTINGS.magikUnlocked ? [HIDDEN_CHARACTERS.Wanderer_Magician] : []),
+      ...(CHEAT_SETTINGS.yokaiUnlocked ? [HIDDEN_CHARACTERS.Yokai] : []),
     ];
 
     const cy = h * 0.50;
@@ -314,11 +315,14 @@ class DuelSelectScene extends Phaser.Scene {
       }
 
       const animKey = 'outfit_anim_' + idx + '_' + charDef.folder;
+      const idleFrames = (outfit.sheets && outfit.sheets.idle)
+        ? outfit.sheets.idle.frames
+        : charDef.sheets.idle.frames;
       if (!this.anims.exists(animKey)) {
         this.anims.create({
           key: animKey,
           frames: this.anims.generateFrameNumbers(texKey, {
-            start: 0, end: charDef.sheets.idle.frames - 1,
+            start: 0, end: idleFrames - 1,
           }),
           frameRate: 8, repeat: -1,
         });
@@ -409,10 +413,13 @@ class DuelSelectScene extends Phaser.Scene {
     // Frame around center outfit
     const outfit = this._outfitChars[this.selectedIndex];
     const charDef = this._outfitPlayer === 'p1' ? this.p1Char : this.p2Char;
+    // Mirror si P2 choisit même perso ET même outfit que P1
+    const isMirrorOutfit = this._outfitPlayer === 'p2' && this.p1Char === charDef && outfit === this.p1Outfit;
+    const outfitDisplayColor = isMirrorOutfit ? this._mirrorColorFor(charDef) : charDef.color;
     if (this._outfitFrame && this._outfitFrameW) {
       const fw = this._outfitFrameW;
       const fh = this._outfitFrameH;
-      const charColor = Phaser.Display.Color.HexStringToColor(charDef.color).color;
+      const charColor = Phaser.Display.Color.HexStringToColor(outfitDisplayColor).color;
       this._outfitFrame.clear();
       this._outfitFrame.fillStyle(0x000000, 0.25);
       this._outfitFrame.fillRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
@@ -420,7 +427,7 @@ class DuelSelectScene extends Phaser.Scene {
       this._outfitFrame.strokeRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
     }
     if (this._outfitName) {
-      this._outfitName.setText(outfit.name.toUpperCase()).setColor(charDef.color);
+      this._outfitName.setText(outfit.name.toUpperCase()).setColor(outfitDisplayColor);
     }
   }
 
@@ -475,14 +482,21 @@ class DuelSelectScene extends Phaser.Scene {
     if (this._carouselFrame && this._carouselFrameW) {
       const fw = this._carouselFrameW;
       const fh = this._carouselFrameH;
-      const charColor = Phaser.Display.Color.HexStringToColor(char.color).color;
+      // Mirror match: use alternate color for P2 when hovering the same char as P1
+      const isMirrorHover = (this.phase === 'p2' || this.phase === 'p2outfit') && this.p1Char === char;
+      const displayColor = isMirrorHover ? this._mirrorColorFor(char) : char.color;
+      const charColor = Phaser.Display.Color.HexStringToColor(displayColor).color;
       this._carouselFrame.clear();
       this._carouselFrame.fillStyle(0x000000, 0.25);
       this._carouselFrame.fillRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
       this._carouselFrame.lineStyle(3, charColor, 0.9);
       this._carouselFrame.strokeRoundedRect(cx - fw / 2, cy - fh / 2, fw, fh, 10);
     }
-    if (this._carouselName)  this._carouselName.setText(char.name.toUpperCase()).setColor(char.color);
+    if (this._carouselName) {
+      const isMirrorHover2 = (this.phase === 'p2' || this.phase === 'p2outfit') && this.p1Char === char;
+      const displayColor2 = isMirrorHover2 ? this._mirrorColorFor(char) : char.color;
+      this._carouselName.setText(char.name.toUpperCase()).setColor(displayColor2);
+    }
     const traitObj = char.trait ? TRAIT_LABELS[char.trait] : null;
     if (this._carouselTrait) this._carouselTrait.setText(traitObj ? traitObj.short : '');
   }
@@ -806,19 +820,38 @@ class DuelSelectScene extends Phaser.Scene {
     if (this.selectBgm && this.selectBgm.isPlaying) this.selectBgm.stop();
   }
 
+  // Returns an alternate color for P2 when it's a mirror match (same character as P1)
+  _mirrorColorFor(charDef) {
+    // Shift hue by rotating RGB components to produce a visually distinct but thematic tint
+    const hex = charDef.color.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    // Mix with a fixed amber shift: blend toward #ffaa22
+    const mr = Math.min(255, Math.round(r * 0.4 + 0xdd * 0.6));
+    const mg = Math.min(255, Math.round(g * 0.4 + 0x88 * 0.6));
+    const mb = Math.min(255, Math.round(b * 0.4 + 0x22 * 0.6));
+    return '#' + mr.toString(16).padStart(2, '0') + mg.toString(16).padStart(2, '0') + mb.toString(16).padStart(2, '0');
+  }
+
   launchDuel() {
     this.confirmed = true;
     this.stopSelectMusic();
     this.sound.play('duel_announce', { volume: AUDIO_SETTINGS.sfxVolume });
     this.cameras.main.flash(300, 255, 255, 255);
     this.time.delayedCall(400, () => {
+      // Mirror match: même perso ET même outfit (ou les deux sans outfit)
+      const sameChar = this.p1Char === this.p2Char;
+      const sameOutfit = (this.p1Outfit || null) === (this.p2Outfit || null);
+      const isMirror = sameChar && sameOutfit;
       const data = {
         p1: this.p1Char,
         p2: this.p2Char,
         p1Outfit: this.p1Outfit || null,
         p2Outfit: this.p2Outfit || null,
         vsAI: this.vsAI,
-        stageIndex: this.selectedStage || null
+        stageIndex: this.selectedStage || null,
+        p2Color: isMirror ? this._mirrorColorFor(this.p2Char) : null,
       };
       if (this.arcade && this.arcadeOpponents) {
         data.arcade = true;

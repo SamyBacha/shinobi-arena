@@ -18,11 +18,20 @@ class DuelScene extends Phaser.Scene {
     return charDef.folder;
   }
 
+  // Returns true if the character (with given outfit) has a projectile ability
+  _charHasProjectile(charDef, outfit) {
+    if (charDef.projectile) return true;
+    if (outfit && (outfit.projectile1 || outfit.projectile2 || outfit.projectile3)) return true;
+    return false;
+  }
+
   init(data) {
     this.p1Def = data.p1;
     this.p2Def = data.p2;
     this.p1Outfit = data.p1Outfit || null;
     this.p2Outfit = data.p2Outfit || null;
+    // Mirror match: use alternate color for P2 so they're visually distinct from P1
+    this.p2Color = (data.p2Color) || this.p2Def.color;
     this.vsAI = data.vsAI || false;
 
     // Arcade mode state
@@ -45,7 +54,7 @@ class DuelScene extends Phaser.Scene {
 
   // Sheets present in outfit folders (standard animations only)
   static get OUTFIT_SHEETS() {
-    return ['idle', 'walk', 'run', 'jump', 'attack1', 'attack2', 'attack3', 'dead', 'hurt', 'shield', 'magic_sphere', 'charge1'];
+    return ['idle', 'idle2', 'walk', 'run', 'jump', 'attack1', 'attack2', 'attack3', 'dead', 'hurt', 'shield', 'magic_sphere', 'charge1', 'fire1', 'fire2'];
   }
 
   preload() {
@@ -57,13 +66,16 @@ class DuelScene extends Phaser.Scene {
       const fs            = charDef.frameSize;
       const outfitSheets  = DuelScene.OUTFIT_SHEETS;
       const outfitSheetOverrides = (outfit && outfit.sheets) || {};
-      Object.keys(sheets).forEach(key => {
+      // Keys to load: charDef sheets + outfit-only sheets (ex: fire1, fire2)
+      const allKeys = new Set([...Object.keys(sheets), ...Object.keys(outfitSheetOverrides)]);
+      allKeys.forEach(key => {
         const loadKey = 'duel_' + tag + '_' + key;
         if (!this.textures.exists(loadKey)) {
           const useOutfit = outfit && outfit.folder && outfitSheets.includes(key);
           const base      = useOutfit ? outfitBase : defaultBase;
           const override  = outfitSheetOverrides[key];
           const sheetDef  = override || sheets[key];
+          if (!sheetDef) return; // outfit-only sheet without base fallback — skip if no outfit
           // frameSize: outfit override > projectile override > charDef default
           let fw = fs, fh = fs;
           if (override && override.frameSize) {
@@ -234,8 +246,11 @@ class DuelScene extends Phaser.Scene {
     // Player state — Fighter trait: +1 max life
     this.p1MaxLives = DUEL_MAX_LIVES + this.p1Def.maxLifeBonus;
     this.p2MaxLives = DUEL_MAX_LIVES + this.p2Def.maxLifeBonus;
-    this.p1 = { lives: this.p1MaxLives, charges: 0, choice: -1, ready: false, def: this.p1Def };
-    this.p2 = { lives: this.p2MaxLives, charges: 0, choice: -1, ready: false, def: this.p2Def };
+    // life_restore trait: start with 1 charge
+    const p1StartCharge = this.p1Def.trait === 'life_restore' ? 1 : 0;
+    const p2StartCharge = this.p2Def.trait === 'life_restore' ? 1 : 0;
+    this.p1 = { lives: this.p1MaxLives, charges: p1StartCharge, choice: -1, ready: false, def: this.p1Def, chargeStreak: 0 };
+    this.p2 = { lives: this.p2MaxLives, charges: p2StartCharge, choice: -1, ready: false, def: this.p2Def, chargeStreak: 0 };
 
     // Sprites — use outfit load tag for texture key
     const p1Tag = this._charLoadTag(this.p1Def, this.p1Outfit);
@@ -250,6 +265,11 @@ class DuelScene extends Phaser.Scene {
     this.p2Sprite.setOrigin(0.5, 0.75);
     this.p2Sprite.setFlipX(true);
     this.p2Sprite.setDepth(310);
+    // Mirror match: tint P2 sprite avec la couleur alternative
+    if (this.p2Color !== this.p2Def.color) {
+      const tintColor = Phaser.Display.Color.HexStringToColor(this.p2Color).color;
+      this.p2Sprite.setTint(tintColor);
+    }
 
     // Entrée des personnages en marchant/courant
     this._doCharacterEntrance();
@@ -273,7 +293,7 @@ class DuelScene extends Phaser.Scene {
 
     const p2Label = this.vsAI ? 'IA — ' + this.p2Def.name.toUpperCase() : this.p2Def.name.toUpperCase();
     this.add.text(w - 30, 20, p2Label, {
-      fontSize: '22px', fontFamily: 'monospace', color: this.p2Def.color,
+      fontSize: '22px', fontFamily: 'monospace', color: this.p2Color,
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(1, 0).setDepth(400);
 
@@ -311,22 +331,22 @@ class DuelScene extends Phaser.Scene {
     this.p2HeartsGfx.setDepth(400);
     this.drawHearts();
 
-    // Charges text
-    this.p1ChargesText = this.add.text(30, 90, 'Charges: 0', {
+    // Mana text
+    this.p1ChargesText = this.add.text(30, 90, 'Mana: 0', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffcc00',
       stroke: '#000000', strokeThickness: 2,
     }).setDepth(400);
-    this.p2ChargesText = this.add.text(w - 30, 90, 'Charges: 0', {
+    this.p2ChargesText = this.add.text(w - 30, 90, 'Mana: 0', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffcc00',
       stroke: '#000000', strokeThickness: 2,
     }).setOrigin(1, 0).setDepth(400);
 
-    // "Spéciale prête !" / "Contre prêt !" indicators for magic_shield
-    this.p1SpecialText = this.add.text(30, 110, '⚡ Spéciale prête !', {
+    // "Projectile prêt !" / "Contre prêt !" indicators for magic_shield
+    this.p1SpecialText = this.add.text(30, 110, '⚡ Projectile prêt !', {
       fontSize: '13px', fontFamily: 'monospace', color: '#55bbff',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
     }).setDepth(400).setAlpha(0);
-    this.p2SpecialText = this.add.text(w - 30, 110, '⚡ Spéciale prête !', {
+    this.p2SpecialText = this.add.text(w - 30, 110, '⚡ Projectile prêt !', {
       fontSize: '13px', fontFamily: 'monospace', color: '#55bbff',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(1, 0).setDepth(400).setAlpha(0);
@@ -336,6 +356,16 @@ class DuelScene extends Phaser.Scene {
     }).setDepth(400).setAlpha(0);
     this.p2ShieldText = this.add.text(w - 30, 127, '🛡 Contre prêt !', {
       fontSize: '12px', fontFamily: 'monospace', color: '#aaddff',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(1, 0).setDepth(400).setAlpha(0);
+
+    // life_restore trait: charge streak indicator
+    this.p1StreakText = this.add.text(30, 144, '', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#ff88cc',
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
+    }).setDepth(400).setAlpha(0);
+    this.p2StreakText = this.add.text(w - 30, 144, '', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#ff88cc',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(1, 0).setDepth(400).setAlpha(0);
 
@@ -354,13 +384,17 @@ class DuelScene extends Phaser.Scene {
 
     // Control labels
     if (DISPLAY_SETTINGS.showHints) {
-      this.add.text(160, 690, '1:Recharger  2:Protéger  3:Frapper(x1/x2/x3)', {
-        fontSize: '12px', fontFamily: 'monospace', color: '#777799',
+      const p1HasProj = this._charHasProjectile(this.p1Def, this.p1Outfit);
+      const p2HasProj = this._charHasProjectile(this.p2Def, this.p2Outfit);
+      const p1Hint = '1:Recharger  2:Protéger  3:Frapper(x1/x2/x3)' + (p1HasProj ? '  4/R:Projectile' : '');
+      this.add.text(160, 690, p1Hint, {
+        fontSize: '11px', fontFamily: 'monospace', color: '#777799',
       }).setOrigin(0.5).setDepth(400);
 
       if (!this.vsAI) {
-        this.add.text(w - 160, 690, '7:Recharger  8:Protéger  9:Frapper(x1/x2/x3)', {
-          fontSize: '12px', fontFamily: 'monospace', color: '#777799',
+        const p2Hint = '7:Recharger  8:Protéger  9:Frapper(x1/x2/x3)' + (p2HasProj ? '  0:Projectile' : '');
+        this.add.text(w - 160, 690, p2Hint, {
+          fontSize: '11px', fontFamily: 'monospace', color: '#777799',
         }).setOrigin(0.5).setDepth(400);
       } else {
         this.add.text(w - 140, 690, 'IA joue automatiquement', {
@@ -379,14 +413,17 @@ class DuelScene extends Phaser.Scene {
     this.keyOne = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
     this.keyTwo = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
     this.keyThree = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.keyFour = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR);
     this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
     this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.keyR = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
 
     // Keys for P2
     this.keySeven = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SEVEN);
     this.keyEight = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.EIGHT);
     this.keyNine = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NINE);
+    this.keyZero = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ZERO);
 
     // Pause
     this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -436,18 +473,25 @@ class DuelScene extends Phaser.Scene {
 
     // Actions
     addTxt(w / 2, 125, '── ACTIONS ──', '18px', '#ffcc00');
-    addTxt(w / 2, 148, 'RECHARGER — Gagne 1 charge', '14px', '#44dd44');
+    addTxt(w / 2, 148, 'RECHARGER — Gagne 1 mana', '14px', '#44dd44');
     addTxt(w / 2, 168, 'PROTÉGER  — Bloque une attaque', '14px', '#4488ff');
-    addTxt(w / 2, 188, 'FRAPPER   — Utilise 1 charge, retire 1 vie', '14px', '#ff4444');
+    addTxt(w / 2, 188, 'FRAPPER   — Utilise 1 mana, retire 1 vie', '14px', '#ff4444');
+
+    const p1HasProj = this._charHasProjectile(this.p1Def, this.p1Outfit);
+    const p2HasProj = this._charHasProjectile(this.p2Def, this.p2Outfit);
+    if (p1HasProj || p2HasProj) {
+      addTxt(w / 2, 208, 'PROJECTILE — 4 mana, perce la garde (1 vie), sinon 2 vies', '13px', '#cc88ff');
+    }
 
     // Super attack
-    addTxt(w / 2, 220, '── SUPER ATTAQUE ──', '18px', '#ff00ff');
-    addTxt(w / 2, 243, 'Appuyez plusieurs fois sur Frapper pour charger !', '14px', '#ddaaff');
-    addTxt(w / 2, 263, 'x2 = 2 charges, retire 2 vies', '13px', '#ff8844');
-    addTxt(w / 2, 283, 'x3 = 3 charges, retire 3 vies (KO direct !)', '13px', '#ff00ff');
+    const superY = (p1HasProj || p2HasProj) ? 232 : 220;
+    addTxt(w / 2, superY, '── SUPER ATTAQUE ──', '18px', '#ff00ff');
+    addTxt(w / 2, superY + 23, 'Appuyez plusieurs fois sur Frapper pour charger !', '14px', '#ddaaff');
+    addTxt(w / 2, superY + 43, 'x2 = 2 mana, retire 2 vies', '13px', '#ff8844');
+    addTxt(w / 2, superY + 63, 'x3 = 3 mana, retire 3 vies (KO direct !)', '13px', '#ff00ff');
 
     // Key rule
-    addTxt(w / 2, 312, 'Frapper nécessite au moins 1 charge !', '14px', '#ff6666');
+    addTxt(w / 2, superY + 92, 'Frapper nécessite au moins 1 mana !', '14px', '#ff6666');
 
     // Traits section (P1/P2 only)
     addTxt(w / 2, 345, '── CAPACITÉS SPÉCIALES ──', '18px', '#ffcc00');
@@ -466,7 +510,7 @@ class DuelScene extends Phaser.Scene {
       wordWrap: { width: 300 }, align: 'center',
     }).setOrigin(0.5, 0).setDepth(501);
     this.rulesObjects.push(p1DescTxt);
-    addTxt(w / 2 + 180, 370, this.p2Def.name.toUpperCase(), '14px', this.p2Def.color);
+    addTxt(w / 2 + 180, 370, this.p2Def.name.toUpperCase(), '14px', this.p2Color);
     addTxt(w / 2 + 180, 387, p2Short, '12px', '#ffcc00');
     const p2DescTxt = this.add.text(w / 2 + 180, 403, p2Desc, {
       fontSize: '10px', fontFamily: 'monospace', color: '#aaddaa',
@@ -482,14 +526,20 @@ class DuelScene extends Phaser.Scene {
     addTxt(w / 2 - 180, 499, '1 ou A : Recharger', '13px', '#aaaacc');
     addTxt(w / 2 - 180, 519, '2 ou Z : Protéger', '13px', '#aaaacc');
     addTxt(w / 2 - 180, 539, '3 ou E : Frapper (x1/x2/x3)', '13px', '#aaaacc');
+    if (this._charHasProjectile(this.p1Def, this.p1Outfit)) {
+      addTxt(w / 2 - 180, 559, '4 ou R : Projectile', '13px', '#cc88ff');
+    }
 
     if (!this.vsAI) {
-      addTxt(w / 2 + 180, 477, 'JOUEUR 2', '16px', this.p2Def.color);
+      addTxt(w / 2 + 180, 477, 'JOUEUR 2', '16px', this.p2Color);
       addTxt(w / 2 + 180, 499, '7 : Recharger', '13px', '#aaaacc');
       addTxt(w / 2 + 180, 519, '8 : Protéger', '13px', '#aaaacc');
       addTxt(w / 2 + 180, 539, '9 : Frapper (x1/x2/x3)', '13px', '#aaaacc');
+      if (this._charHasProjectile(this.p2Def, this.p2Outfit)) {
+        addTxt(w / 2 + 180, 559, '0 : Projectile', '13px', '#cc88ff');
+      }
     } else {
-      addTxt(w / 2 + 180, 477, 'IA', '16px', this.p2Def.color);
+      addTxt(w / 2 + 180, 477, 'IA', '16px', this.p2Color);
       addTxt(w / 2 + 180, 505, 'Joue automatiquement', '13px', '#aaaacc');
     }
 
@@ -515,6 +565,7 @@ class DuelScene extends Phaser.Scene {
     // Sheet overrides from outfit (ex: different frame counts for magic_sphere, charge1)
     const ov = (outfit && outfit.sheets) || {};
     const frames = key => (ov[key] ? ov[key].frames : s[key].frames);
+    const fps    = (key, defaultRate) => (ov[key] && ov[key].frameRate) ? ov[key].frameRate : defaultRate;
 
     const makeAnim = (name, sheetKey, fr, rate, rep) => {
       const animKey = tag + '_' + name;
@@ -528,13 +579,20 @@ class DuelScene extends Phaser.Scene {
       });
     };
 
-    makeAnim('idle',   'idle',   frames('idle'),   8,  -1);
+    makeAnim('idle',  'idle',  frames('idle'),  8, -1);
+    // idle2 : uniquement pour les Yokai — supprimer toujours l'ancienne anim pour éviter les résidus de session précédente
+    if (s.idle2 || ov.idle2) {
+      makeAnim('idle2', 'idle2', frames('idle2'), 8, 0);
+    } else {
+      const idle2Key = tag + '_idle2';
+      if (this.anims.exists(idle2Key)) this.anims.remove(idle2Key);
+    }
     if (s.walk) makeAnim('walk', 'walk', frames('walk'), 10, -1);
     if (s.run)  makeAnim('run',  'run',  frames('run'),  10, -1);
-    makeAnim('attack1', 'attack1', frames('attack1'), 12, 0);
-    makeAnim('attack2', 'attack2', frames('attack2'), 10, 0);
-    makeAnim('attack3', 'attack3', frames('attack3'), 10, 0);
-    makeAnim('shield', 'shield', frames('shield'), 8, -1);
+    makeAnim('attack1', 'attack1', frames('attack1'), fps('attack1', 12), 0);
+    makeAnim('attack2', 'attack2', frames('attack2'), fps('attack2', 10), 0);
+    makeAnim('attack3', 'attack3', frames('attack3'), fps('attack3', 10), 0);
+    if (s.shield || ov.shield) makeAnim('shield', 'shield', frames('shield'), 8, -1);
     if (s.flight) makeAnim('flight', 'flight', frames('flight'), 10, -1);
     if (s.jump)   makeAnim('jump',   'jump',   frames('jump'),   10, 0);
     makeAnim('hurt', 'hurt', frames('hurt'), 6, 0);
@@ -543,6 +601,17 @@ class DuelScene extends Phaser.Scene {
     if (charDef.projectile) {
       const projFrames = ov[charDef.projectile.sheet] ? ov[charDef.projectile.sheet].frames : charDef.projectile.frames;
       makeAnim('projectile', charDef.projectile.sheet, projFrames, 12, -1);
+    }
+    // Outfit-specific projectiles (Kitsune fire1/fire2)
+    const p1def  = outfit && outfit.projectile1;
+    const p2def  = outfit && outfit.projectile2;
+    if (p1def && (ov[p1def.sheet] || s[p1def.sheet])) {
+      const fr = ov[p1def.sheet] ? ov[p1def.sheet].frames : p1def.frames;
+      makeAnim('projectile1', p1def.sheet, fr, 12, -1);
+    }
+    if (p2def && (ov[p2def.sheet] || s[p2def.sheet])) {
+      const fr = ov[p2def.sheet] ? ov[p2def.sheet].frames : p2def.frames;
+      makeAnim('projectile2', p2def.sheet, fr, 12, -1);
     }
   }
 
@@ -568,6 +637,95 @@ class DuelScene extends Phaser.Scene {
         makeFxAnim(animKey, prefix, info.count, fxRates[fxName] || 16);
       });
     });
+  }
+
+  // ---- Idle cycle (Yokai: idle×2 → pause 1s → idle2 → repeat) ----
+  // Démarre le cycle d'animation idle pour un joueur.
+  // Pour les persos sans idle2, équivalent à sprite.play('duel_pX_idle').
+  _startIdleCycle(playerNum) {
+    const prefix  = 'duel_p' + playerNum;
+    const sprite  = playerNum === 1 ? this.p1Sprite : this.p2Sprite;
+    const charDef = playerNum === 1 ? this.p1Def    : this.p2Def;
+    const outfit  = playerNum === 1 ? this.p1Outfit : this.p2Outfit;
+    const timerKey = '_p' + playerNum + 'IdleTimer';
+
+    // Annuler tout cycle précédent
+    if (this[timerKey]) { this[timerKey].remove(false); this[timerKey] = null; }
+
+    const hasIdle2 = this.anims.exists(prefix + '_idle2');
+
+    if (!hasIdle2) {
+      sprite.play(prefix + '_idle');
+      return;
+    }
+
+    // Cycle : joue idle en boucle (-1) deux fois la durée d'un cycle,
+    // puis s'arrête, attend 1s, joue idle2 une fois, puis reprend idle.
+    let loopCount = 0;
+    const idleFrames = charDef.sheets.idle2 ? charDef.sheets.idle2 : // shouldn't be needed
+      ((outfit && outfit.sheets && outfit.sheets.idle) ? outfit.sheets.idle : charDef.sheets.idle);
+    // Durée d'un cycle idle complet (frames × 1000ms / frameRate)
+    const idleAnim   = this.anims.get(prefix + '_idle');
+    const idle2Anim  = this.anims.get(prefix + '_idle2');
+    const idleDur    = idleAnim  ? (idleAnim.frames.length  / (idleAnim.frameRate  || 8)) * 1000 : 800;
+    const idle2Dur   = idle2Anim ? (idle2Anim.frames.length / (idle2Anim.frameRate || 8)) * 1000 : 600;
+
+    const startCycle = () => {
+      // S'assurer que le sprite est toujours en vie et en idle
+      if (this.gameOver) return;
+      const pData = playerNum === 1 ? this.p1 : this.p2;
+      if (pData.lives <= 0) return;
+
+      loopCount = 0;
+      sprite.play(prefix + '_idle');
+
+      // Après 2 cycles d'idle : stopper l'anim, attendre 1s, jouer idle2
+      const twoCycles = idleDur * 2;
+      this[timerKey] = this.time.delayedCall(twoCycles, () => {
+        this[timerKey] = null;
+        if (this.gameOver) return;
+        const pData2 = playerNum === 1 ? this.p1 : this.p2;
+        if (pData2.lives <= 0) return;
+        // Vérifier que le sprite joue encore l'idle (pas une autre anim lancée entre-temps)
+        const currentAnim = sprite.anims && sprite.anims.currentAnim;
+        if (!currentAnim || currentAnim.key !== prefix + '_idle') return;
+
+        sprite.stop(); // pause visuelle (reste sur la dernière frame)
+
+        this[timerKey] = this.time.delayedCall(1000, () => {
+          this[timerKey] = null;
+          if (this.gameOver) return;
+          const pData3 = playerNum === 1 ? this.p1 : this.p2;
+          if (pData3.lives <= 0) return;
+          const currentAnim2 = sprite.anims && sprite.anims.currentAnim;
+          // Si une autre anim s'est lancée pendant la pause, ne pas reprendre
+          if (currentAnim2 && currentAnim2.key !== prefix + '_idle') return;
+
+          sprite.play(prefix + '_idle2');
+          sprite.once('animationcomplete', () => {
+            // Recommencer le cycle depuis le début
+            startCycle();
+          });
+        });
+      });
+    };
+
+    startCycle();
+  }
+
+  // Joue l'idle d'un joueur (démarre le cycle si idle2 existe, sinon idle normal)
+  _playIdle(playerNum) {
+    const prefix = 'duel_p' + playerNum;
+    const sprite = playerNum === 1 ? this.p1Sprite : this.p2Sprite;
+    // Annuler tout cycle en cours
+    const timerKey = '_p' + playerNum + 'IdleTimer';
+    if (this[timerKey]) { this[timerKey].remove(false); this[timerKey] = null; }
+
+    if (this.anims.exists(prefix + '_idle2')) {
+      this._startIdleCycle(playerNum);
+    } else {
+      sprite.play(prefix + '_idle');
+    }
   }
 
   // Helper : joue un FX propre à un personnage par nom (ex: 'attack1', 'flames')
@@ -649,7 +807,7 @@ class DuelScene extends Phaser.Scene {
 
   drawHearts() {
     const colorP1 = Phaser.Display.Color.HexStringToColor(this.p1Def.color).color;
-    const colorP2 = Phaser.Display.Color.HexStringToColor(this.p2Def.color).color;
+    const colorP2 = Phaser.Display.Color.HexStringToColor(this.p2Color).color;
 
     this.p1HeartsGfx.clear();
     for (let i = 0; i < this.p1MaxLives; i++) {
@@ -668,19 +826,60 @@ class DuelScene extends Phaser.Scene {
   }
 
   updateChargesDisplay() {
-    this.p1ChargesText.setText('Charges: ' + this.p1.charges);
-    this.p2ChargesText.setText('Charges: ' + this.p2.charges);
+    this.p1ChargesText.setText('Mana: ' + this.p1.charges);
+    this.p2ChargesText.setText('Mana: ' + this.p2.charges);
 
-    // magic_shield: persistent flame aura + "Spéciale prête !" when ≥3 charges, "Contre prêt !" when ≥1
-    const p1Ready  = this.p1Def.trait === 'magic_shield' && this.p1.charges >= 3;
-    const p2Ready  = this.p2Def.trait === 'magic_shield' && this.p2.charges >= 3;
+    // magic_shield: persistent flame aura + "Projectile prêt !" when ≥4 mana, "Contre prêt !" when ≥1
+    const p1KitsuneDisp = !!(this.p1Outfit && this.p1Outfit.projectile1);
+    const p2KitsuneDisp = !!(this.p2Outfit && this.p2Outfit.projectile1);
+
+    const p1Ready  = this.p1Def.trait === 'magic_shield' && this.p1.charges >= 4;
+    const p2Ready  = this.p2Def.trait === 'magic_shield' && this.p2.charges >= 4;
     const p1Shield = this.p1Def.trait === 'magic_shield' && this.p1.charges >= 1 && !p1Ready;
     const p2Shield = this.p2Def.trait === 'magic_shield' && this.p2.charges >= 1 && !p2Ready;
 
-    this.p1SpecialText.setAlpha(p1Ready ? 1 : 0);
-    this.p2SpecialText.setAlpha(p2Ready ? 1 : 0);
+    // Kitsune: show projectile readiness based on mana threshold
+    const p1KitsuneReady2 = p1KitsuneDisp && this.p1.charges >= 4;
+    const p1KitsuneReady1 = p1KitsuneDisp && this.p1.charges >= 3 && !p1KitsuneReady2;
+    const p2KitsuneReady2 = p2KitsuneDisp && this.p2.charges >= 4;
+    const p2KitsuneReady1 = p2KitsuneDisp && this.p2.charges >= 3 && !p2KitsuneReady2;
+
+    if (p1KitsuneReady2) {
+      this.p1SpecialText.setText('⚡ Projectile x2 prêt !').setAlpha(1);
+    } else if (p1KitsuneReady1) {
+      this.p1SpecialText.setText('⚡ Projectile x1 prêt !').setAlpha(1);
+    } else if (p1Ready) {
+      this.p1SpecialText.setText('⚡ Projectile prêt !').setAlpha(1);
+    } else {
+      this.p1SpecialText.setAlpha(0);
+    }
+
+    if (p2KitsuneReady2) {
+      this.p2SpecialText.setText('⚡ Projectile x2 prêt !').setAlpha(1);
+    } else if (p2KitsuneReady1) {
+      this.p2SpecialText.setText('⚡ Projectile x1 prêt !').setAlpha(1);
+    } else if (p2Ready) {
+      this.p2SpecialText.setText('⚡ Projectile prêt !').setAlpha(1);
+    } else {
+      this.p2SpecialText.setAlpha(0);
+    }
+
     this.p1ShieldText.setAlpha(p1Shield ? 1 : 0);
     this.p2ShieldText.setAlpha(p2Shield ? 1 : 0);
+
+    // life_restore trait: charge streak indicator
+    if (this.p1Def.trait === 'life_restore' && !p1KitsuneDisp && this.p1.chargeStreak > 0) {
+      this.p1StreakText.setText('↑'.repeat(this.p1.chargeStreak) + ' (' + this.p1.chargeStreak + '/4 → +1 vie)');
+      this.p1StreakText.setAlpha(1);
+    } else {
+      this.p1StreakText.setAlpha(0);
+    }
+    if (this.p2Def.trait === 'life_restore' && !p2KitsuneDisp && this.p2.chargeStreak > 0) {
+      this.p2StreakText.setText('↑'.repeat(this.p2.chargeStreak) + ' (' + this.p2.chargeStreak + '/4 → +1 vie)');
+      this.p2StreakText.setAlpha(1);
+    } else {
+      this.p2StreakText.setAlpha(0);
+    }
 
     if (p1Ready && !this._p1MagicAura) {
       this._p1MagicAura = this.spawnFlameEffect(this.p1Sprite, 'blue', 999999);
@@ -710,10 +909,14 @@ class DuelScene extends Phaser.Scene {
       const s = charDef.sheets;
       const hasRun  = !!s.run;
       const hasWalk = !!s.walk;
-      const useRun  = hasRun && (!hasWalk || Math.random() < 0.5);
-      if (useRun)  return { anim: 'duel_' + prefix + '_run',  duration: 900 };
-      if (hasWalk) return { anim: 'duel_' + prefix + '_walk', duration: 1300 };
-      return { anim: 'duel_' + prefix + '_idle', duration: 1100 };
+      const hasJump = !!s.jump;
+      // Build pool of available entrance animations
+      const pool = [];
+      if (hasRun)  pool.push({ anim: 'duel_' + prefix + '_run',  duration: 900  });
+      if (hasWalk) pool.push({ anim: 'duel_' + prefix + '_walk', duration: 1300 });
+      if (hasJump) pool.push({ anim: 'duel_' + prefix + '_jump', duration: 1100 });
+      if (pool.length === 0) return { anim: 'duel_' + prefix + '_idle', duration: 1100 };
+      return pool[Math.floor(Math.random() * pool.length)];
     };
 
     const e1 = pickAnim('p1', this.p1Def);
@@ -728,7 +931,7 @@ class DuelScene extends Phaser.Scene {
       duration: e1.duration,
       ease: 'Linear',
       onComplete: () => {
-        this.p1Sprite.play('duel_p1_idle');
+        this._playIdle(1);
         this.p1ChoiceText.setText('?');
 
         // P2 entre ensuite
@@ -740,7 +943,7 @@ class DuelScene extends Phaser.Scene {
           duration: e2.duration,
           ease: 'Linear',
           onComplete: () => {
-            this.p2Sprite.play('duel_p2_idle');
+            this._playIdle(2);
             this.p2ChoiceText.setText('?');
             if (DISPLAY_SETTINGS.showHints) {
               this.showRules();
@@ -779,14 +982,15 @@ class DuelScene extends Phaser.Scene {
     this.p1ChoiceText.setText('?').setColor('#ffffff');
     this.p2ChoiceText.setText('?').setColor('#ffffff');
     this.turnText.setText('TOUR ' + this.turnNumber + ' — CHOISISSEZ !');
+    this.updateChargesDisplay();
 
     // Reset sprites to idle and original positions
     this.p1Sprite.setAlpha(1);
     this.p2Sprite.setAlpha(1);
     this.p1Sprite.x = 320;
     this.p2Sprite.x = 960;
-    if (this.p1.lives > 0) this.p1Sprite.play('duel_p1_idle');
-    if (this.p2.lives > 0) this.p2Sprite.play('duel_p2_idle');
+    if (this.p1.lives > 0) this._playIdle(1);
+    if (this.p2.lives > 0) this._playIdle(2);
   }
 
   setPlayerChoice(player, action) {
@@ -796,6 +1000,31 @@ class DuelScene extends Phaser.Scene {
     const choiceText = player === 1 ? this.p1ChoiceText : this.p2ChoiceText;
 
     const isFrapper = action === DUEL_ACTIONS.FRAPPER || action === DUEL_ACTIONS.FRAPPER2 || action === DUEL_ACTIONS.FRAPPER3 || action === DUEL_ACTIONS.FRAPPER4;
+    const isProjectile = action === DUEL_ACTIONS.PROJECTILE || action === DUEL_ACTIONS.PROJECTILE2;
+
+    // Projectile action
+    if (isProjectile) {
+      const playerDef = player === 1 ? this.p1Def : this.p2Def;
+      const playerOutfit = player === 1 ? this.p1Outfit : this.p2Outfit;
+      if (!this._charHasProjectile(playerDef, playerOutfit)) return; // not available
+      // Kitsune: projectile x1 at 3 charges, x2 at 4 charges
+      const isKitsune = !!(playerOutfit && (playerOutfit.projectile1 || playerOutfit.projectile2));
+      const projCost = isKitsune ? 3 : 4;
+      if (pData.charges < projCost) {
+        this.flashNoCharge(player === 1 ? 320 : 960);
+        return;
+      }
+      // Kitsune can do x2 at 4 charges; everyone else does x1 only
+      if (isKitsune && pData.charges >= 4) {
+        pData.choice = DUEL_ACTIONS.PROJECTILE2;
+      } else {
+        pData.choice = DUEL_ACTIONS.PROJECTILE;
+      }
+      pData.ready = true;
+      choiceText.setText('...').setColor('#cc88ff');
+      if (this.p1.ready && this.p2.ready) this.lockChoices();
+      return;
+    }
 
     if (isFrapper) {
       // First press — need at least 1 charge
@@ -803,10 +1032,13 @@ class DuelScene extends Phaser.Scene {
         this.flashNoCharge(player === 1 ? 320 : 960);
         return;
       }
-      // Samurai: max x3 charges (deals +1 bonus dmg) / mimicry, disguise & magic_shield: max x2
+      // mimicry, disguise & magic_shield: max x2 / others (including life_restore): max x3
+      // Kitsune (outfit with projectile1): max x1 for Frapper
       const playerDef = player === 1 ? this.p1Def : this.p2Def;
+      const playerOutfit = player === 1 ? this.p1Outfit : this.p2Outfit;
+      const isKitsuneOutfit = !!(playerOutfit && playerOutfit.projectile1);
       const limitX2 = playerDef.trait === 'mimicry' || playerDef.trait === 'disguise' || playerDef.trait === 'magic_shield';
-      const maxAttackLevel = limitX2 ? 2 : 3;
+      const maxAttackLevel = isKitsuneOutfit ? 1 : (limitX2 ? 2 : 3);
       // Trying to upgrade — need enough charges
       const nextLevel = pData.attackLevel + 1;
       if (nextLevel > maxAttackLevel || nextLevel > pData.charges) {
@@ -875,7 +1107,7 @@ class DuelScene extends Phaser.Scene {
 
   flashNoCharge(x) {
     this.noChargeText.setPosition(x, 500);
-    this.noChargeText.setText('PAS DE CHARGE !');
+    this.noChargeText.setText('PAS DE MANA !');
     this.noChargeText.setAlpha(1);
     this.tweens.add({
       targets: this.noChargeText,
@@ -908,6 +1140,16 @@ class DuelScene extends Phaser.Scene {
     return this.getAttackLevel(action) > 0;
   }
 
+  getProjectileLevel(action) {
+    if (action === DUEL_ACTIONS.PROJECTILE) return 1;
+    if (action === DUEL_ACTIONS.PROJECTILE2) return 2;
+    return 0;
+  }
+
+  isProjectileAction(action) {
+    return this.getProjectileLevel(action) > 0;
+  }
+
   resolveTurn() {
     const a1 = this.p1.choice;
     const a2 = this.p2.choice;
@@ -917,6 +1159,10 @@ class DuelScene extends Phaser.Scene {
     const P = DUEL_ACTIONS.PROTEGER;
     const f1 = this.isAttackAction(a1);
     const f2 = this.isAttackAction(a2);
+    const proj1 = this.isProjectileAction(a1);
+    const proj2 = this.isProjectileAction(a2);
+    const projLvl1 = this.getProjectileLevel(a1);
+    const projLvl2 = this.getProjectileLevel(a2);
     const lvl1 = this.getAttackLevel(a1);
     const lvl2 = this.getAttackLevel(a2);
     // Samurai attack_x4 trait: each hit deals +1 bonus damage
@@ -936,65 +1182,25 @@ class DuelScene extends Phaser.Scene {
     this._p2JumpDodge = false;
     this._p1DisguiseAttack = false;
     this._p2DisguiseAttack = false;
-    this._p1MagicAttack = false;
-    this._p2MagicAttack = false;
     this._p1ShieldCounter = false;
     this._p2ShieldCounter = false;
+    this._p1LifeRestore = false;
+    this._p2LifeRestore = false;
+    this._p1ProjectileFired = false;
+    this._p2ProjectileFired = false;
+    this._p1ProjectileLevel = 0;
+    this._p2ProjectileLevel = 0;
+    this._projCancel = false;
 
-    // magic_shield: Recharger with ≥3 charges = special magic attack
     const p1MagicShield = this.p1Def.trait === 'magic_shield';
     const p2MagicShield = this.p2Def.trait === 'magic_shield';
-    const p1MagicAttack = p1MagicShield && a1 === R && this.p1.charges >= 3;
-    const p2MagicAttack = p2MagicShield && a2 === R && this.p2.charges >= 3;
 
     // Kunoichi mimicry trait flags
     const p1Mimicry = this.p1Def.trait === 'mimicry';
     const p2Mimicry = this.p2Def.trait === 'mimicry';
 
-    // --- Magic attack resolution (intercepts before normal matrix) ---
-    if (p1MagicAttack || p2MagicAttack) {
-      // Apply each magic attack: -3 charges, opponent -1 life, mage +1 life (pierces guard)
-      if (p1MagicAttack) {
-        this._p1MagicAttack = true;
-        this.p1.charges -= 3;
-        this.p2.lives -= 1;
-        this.p1.lives = Math.min(this.p1.lives + 1, this.p1MaxLives);
-      }
-      if (p2MagicAttack) {
-        this._p2MagicAttack = true;
-        this.p2.charges -= 3;
-        this.p1.lives -= 1;
-        this.p2.lives = Math.min(this.p2.lives + 1, this.p2MaxLives);
-      }
-      // Handle the other player's action normally alongside the magic attack
-      if (p1MagicAttack && p2MagicAttack) {
-        msg = 'Double attaque magique ! Les deux perdent 1 vie et se soignent !';
-      } else if (p1MagicAttack) {
-        if (a2 === R) {
-          this.p2.charges += p2ChargeGain;
-          msg = 'J1 lance une attaque magique ! J2 -1 vie ! J2 recharge.';
-        } else if (a2 === P) {
-          msg = 'J1 lance une attaque magique ! Transperce la garde ! J2 -1 vie !';
-        } else if (f2) {
-          // Opponent attacks normally, magic attack also hits
-          this.p1.lives -= hit2; this.p2.charges -= lvl2;
-          msg = 'J1 lance une attaque magique ! J2 ' + lbl2 + ' ! Les deux se touchent !';
-        }
-      } else { // p2MagicAttack
-        if (a1 === R) {
-          this.p1.charges += p1ChargeGain;
-          msg = 'J2 lance une attaque magique ! J1 -1 vie ! J1 recharge.';
-        } else if (a1 === P) {
-          msg = 'J2 lance une attaque magique ! Transperce la garde ! J1 -1 vie !';
-        } else if (f1) {
-          // Opponent attacks normally, magic attack also hits
-          this.p2.lives -= hit1; this.p1.charges -= lvl1;
-          msg = 'J2 lance une attaque magique ! J1 ' + lbl1 + ' ! Les deux se touchent !';
-        }
-      }
-    }
-    // Resolution matrix (normal, when no magic attack)
-    else if (a1 === R && a2 === R) {
+    // Resolution matrix
+    if (a1 === R && a2 === R) {
       // Mimicry: same action as opponent → +1 bonus charge
       const p1Bonus = p1Mimicry ? 1 : 0;
       const p2Bonus = p2Mimicry ? 1 : 0;
@@ -1053,8 +1259,8 @@ class DuelScene extends Phaser.Scene {
         }
       }
       // Mimicry: both protect → +1 bonus charge
-      if (p1Mimicry) { this.p1.charges += 1; msg = (msg ? msg + ' ' : '') + 'Kunoichi imite et gagne +1 charge !'; }
-      if (p2Mimicry) { this.p2.charges += 1; msg = (msg ? msg + ' ' : '') + 'Kunoichi imite et gagne +1 charge !'; }
+      if (p1Mimicry) { this.p1.charges += 1; msg = (msg ? msg + ' ' : '') + 'Kunoichi imite et gagne +1 mana !'; }
+      if (p2Mimicry) { this.p2.charges += 1; msg = (msg ? msg + ' ' : '') + 'Kunoichi imite et gagne +1 mana !'; }
       if (!msg) msg = 'Les deux protègent. Rien ne se passe.';
     } else if (a1 === P && f2) {
       this.p2.charges -= lvl2;
@@ -1112,12 +1318,120 @@ class DuelScene extends Phaser.Scene {
       if (p1Mimicry) this.p1.charges += 1;
       if (p2Mimicry) this.p2.charges += 1;
       msg = 'Les deux frappent ! J1 -' + dmg1 + ' vie' + (dmg1 > 1 ? 's' : '') + ', J2 -' + dmg2 + ' vie' + (dmg2 > 1 ? 's' : '') + ' !';
-      if (p1Mimicry || p2Mimicry) msg += ' Kunoichi imite et gagne +1 charge !';
+      if (p1Mimicry || p2Mimicry) msg += ' Kunoichi imite et gagne +1 mana !';
     }
 
-    // magic_shield: Protéger gives +1 charge only if attacked
-    if (p1MagicShield && a1 === P && (f2 || p2MagicAttack)) this.p1.charges += 1;
-    if (p2MagicShield && a2 === P && (f1 || p1MagicAttack)) this.p2.charges += 1;
+    // magic_shield: Protéger gives +1 mana only if attacked (melee or projectile)
+    if (p1MagicShield && a1 === P && (f2 || proj2)) this.p1.charges += 1;
+    if (p2MagicShield && a2 === P && (f1 || proj1)) this.p2.charges += 1;
+
+    // Projectile action resolution (separate from melee attack matrix)
+    // Kitsune: cost 3 (x1) or 4 (x2); Standard: cost 4 (x1 only)
+    // vs Protect: 1 damage; vs anything else: projLvl damages
+    // Both fire projectiles simultaneously → annulation : perte de mana seulement, aucun dégât
+    if (proj1 && proj2) {
+      const isKitsuneP1b = !!(this.p1Outfit && this.p1Outfit.projectile1);
+      const isKitsuneP2b = !!(this.p2Outfit && this.p2Outfit.projectile1);
+      const cost1b = isKitsuneP1b ? (projLvl1 >= 2 ? 4 : 3) : 4;
+      const cost2b = isKitsuneP2b ? (projLvl2 >= 2 ? 4 : 3) : 4;
+      this.p1.charges -= cost1b;
+      this.p2.charges -= cost2b;
+      this._p1ProjectileFired = true; this._p1ProjectileLevel = projLvl1;
+      this._p2ProjectileFired = true; this._p2ProjectileLevel = projLvl2;
+      const diff = projLvl1 - projLvl2;
+      if (diff === 0) {
+        // Equal — full cancel, no damage
+        this._projCancel = true;
+        msg = 'Les deux tirent ! Les projectiles s\'annulent au milieu !';
+      } else if (diff > 0) {
+        // P1 fired more — P2 takes the difference
+        this._projCancel = false;
+        this.p2.lives -= diff;
+        msg = 'J1 tire ' + projLvl1 + ' projectile(s), J2 tire ' + projLvl2 + ' ! J2 -' + diff + ' vie' + (diff > 1 ? 's' : '') + ' !';
+      } else {
+        // P2 fired more — P1 takes the difference
+        this._projCancel = false;
+        this.p1.lives -= (-diff);
+        msg = 'J2 tire ' + projLvl2 + ' projectile(s), J1 tire ' + projLvl1 + ' ! J1 -' + (-diff) + ' vie' + ((-diff) > 1 ? 's' : '') + ' !';
+      }
+    } else if (proj1) {
+      const isKitsuneP1 = !!(this.p1Outfit && this.p1Outfit.projectile1);
+      const cost1 = isKitsuneP1 ? (projLvl1 >= 2 ? 4 : 3) : 4;
+      this.p1.charges -= cost1;
+      this._p1ProjectileFired = true;
+      this._p1ProjectileLevel = projLvl1;
+      if (a2 === P) {
+        this.p2.lives -= 1;
+        msg = (msg ? msg + ' ' : '') + 'J1 tire un projectile ! Garde réduit les dégâts — J2 -1 vie !';
+      } else if (a2 === R) {
+        this.p2.charges += p2ChargeGain;
+        this.p2.lives -= projLvl1;
+        msg = (msg ? msg + ' ' : '') + 'J1 tire un projectile ! J2 recharge mais prend ' + projLvl1 + ' vie' + (projLvl1 > 1 ? 's' : '') + ' !';
+      } else if (f2) {
+        // Both act simultaneously: P2 melee hits P1, P1 projectile hits P2
+        this.p2.lives -= projLvl1;
+        this.p1.lives -= hit2; this.p2.charges -= lvl2;
+        msg = (msg ? msg + ' ' : '') + 'J1 tire un projectile et J2 frappe ! Les deux se touchent !';
+      } else {
+        this.p2.lives -= projLvl1;
+        msg = (msg ? msg + ' ' : '') + 'J1 tire un projectile ! J2 -' + projLvl1 + ' vie' + (projLvl1 > 1 ? 's' : '') + ' !';
+      }
+    }
+    if (proj2 && !proj1) {
+      const isKitsuneP2 = !!(this.p2Outfit && this.p2Outfit.projectile1);
+      const cost2 = isKitsuneP2 ? (projLvl2 >= 2 ? 4 : 3) : 4;
+      this.p2.charges -= cost2;
+      this._p2ProjectileFired = true;
+      this._p2ProjectileLevel = projLvl2;
+      if (a1 === P) {
+        this.p1.lives -= 1;
+        msg = (msg ? msg + ' ' : '') + 'J2 tire un projectile ! Garde réduit les dégâts — J1 -1 vie !';
+      } else if (a1 === R) {
+        this.p1.charges += p1ChargeGain;
+        this.p1.lives -= projLvl2;
+        msg = (msg ? msg + ' ' : '') + 'J2 tire un projectile ! J1 recharge mais prend ' + projLvl2 + ' vie' + (projLvl2 > 1 ? 's' : '') + ' !';
+      } else if (f1) {
+        this.p1.lives -= projLvl2;
+        this.p2.lives -= hit1; this.p1.charges -= lvl1;
+        msg = (msg ? msg + ' ' : '') + 'J2 tire un projectile et J1 frappe ! Les deux se touchent !';
+      } else {
+        this.p1.lives -= projLvl2;
+        msg = (msg ? msg + ' ' : '') + 'J2 tire un projectile ! J1 -' + projLvl2 + ' vie' + (projLvl2 > 1 ? 's' : '') + ' !';
+      }
+    }
+
+    // life_restore: track consecutive Recharger streaks; 4 in a row = -4 mana, +1 vie
+    // Kitsune outfit: life_restore désactivé
+    const p1IsKitsune = !!(this.p1Outfit && this.p1Outfit.projectile1);
+    const p2IsKitsune = !!(this.p2Outfit && this.p2Outfit.projectile1);
+    if (this.p1Def.trait === 'life_restore' && !p1IsKitsune) {
+      if (a1 === R) {
+        this.p1.chargeStreak = (this.p1.chargeStreak || 0) + 1;
+        if (this.p1.chargeStreak >= 4) {
+          this.p1.charges -= 4;
+          this.p1.lives = Math.min(this.p1.lives + 1, this.p1MaxLives);
+          this.p1.chargeStreak = 0;
+          this._p1LifeRestore = true;
+          msg = (msg ? msg + ' ' : '') + 'J1 récupère 1 vie !';
+        }
+      } else {
+        this.p1.chargeStreak = 0;
+      }
+    }
+    if (this.p2Def.trait === 'life_restore' && !p2IsKitsune) {
+      if (a2 === R) {
+        this.p2.chargeStreak = (this.p2.chargeStreak || 0) + 1;
+        if (this.p2.chargeStreak >= 4) {
+          this.p2.charges -= 4;
+          this.p2.lives = Math.min(this.p2.lives + 1, this.p2MaxLives);
+          this.p2.chargeStreak = 0;
+          this._p2LifeRestore = true;
+          msg = (msg ? msg + ' ' : '') + 'J2 récupère 1 vie !';
+        }
+      } else {
+        this.p2.chargeStreak = 0;
+      }
+    }
 
     // Clamp lives and charges to 0
     this.p1.lives = Math.max(0, this.p1.lives);
@@ -1148,10 +1462,11 @@ class DuelScene extends Phaser.Scene {
   spawnFlameEffect(sprite, color, duration) {
     this.createFlameTexture();
 
-    const isBlue = color === 'blue';
-    const tint1 = isBlue ? 0x0088ff : 0xff2200;
-    const tint2 = isBlue ? 0x00ccff : 0xff8800;
-    const tint3 = isBlue ? 0xaaeeff : 0xffcc00;
+    const isBlue  = color === 'blue';
+    const isGreen = color === 'green';
+    const tint1 = isBlue ? 0x0088ff : (isGreen ? 0x00cc44 : 0xff2200);
+    const tint2 = isBlue ? 0x00ccff : (isGreen ? 0x44ff88 : 0xff8800);
+    const tint3 = isBlue ? 0xaaeeff : (isGreen ? 0xaaffcc : 0xffcc00);
 
     const emitter = this.add.particles(sprite.x, sprite.y, 'flame_particle', {
       speed: { min: 40, max: 120 },
@@ -1206,14 +1521,22 @@ class DuelScene extends Phaser.Scene {
     const P = DUEL_ACTIONS.PROTEGER;
     const f1 = this.isAttackAction(a1);
     const f2 = this.isAttackAction(a2);
+    const proj1 = this.isProjectileAction(a1);
+    const proj2 = this.isProjectileAction(a2);
+    const projLvl1 = this._p1ProjectileLevel || 0;
+    const projLvl2 = this._p2ProjectileLevel || 0;
     const lvl1 = this.getAttackLevel(a1);
     const lvl2 = this.getAttackLevel(a2);
     const maxLvl = Math.max(lvl1, lvl2, 1);
 
+    // Kitsune melee is corps à corps (rush + attack1) — no ranged visual for melee
+    const p1Ranged = false;
+    const p2Ranged = false;
+
     // Rush movement constants
     const rushDuration = 300;
     const returnDuration = 300;
-    const hasRush = f1 || f2;
+    const hasRush = (f1 && !p1Ranged) || (f2 && !p2Ranged);
     const rush = hasRush ? rushDuration : 0;
 
     const flameDuration = DUEL_NEXT_TURN_DELAY + rush + returnDuration + (maxLvl - 1) * 400 - 200;
@@ -1239,7 +1562,10 @@ class DuelScene extends Phaser.Scene {
 
     // --- Rush movement + attack for P1 ---
     if (f1) {
-      if (p1HasRun) {
+      if (p1Ranged) {
+        // Ranged: attack in place, no rush
+        this.playAttackChain(this.p1Sprite, 'duel_p1', lvl1, null, this.p1Def);
+      } else if (p1HasRun) {
         this.p1Sprite.play('duel_p1_run');
         this.tweens.add({
           targets: this.p1Sprite, x: p1TargetX,
@@ -1269,7 +1595,7 @@ class DuelScene extends Phaser.Scene {
       // Flight trait: use flight anim instead of shield
       if (this.p1Def.trait === 'flight' && this.anims.exists('duel_p1_flight')) {
         this.p1Sprite.play('duel_p1_flight');
-      } else {
+      } else if (this.anims.exists('duel_p1_shield')) {
         this.p1Sprite.play('duel_p1_shield');
       }
       if (this.p1Def.trait === 'magic_shield') {
@@ -1279,7 +1605,10 @@ class DuelScene extends Phaser.Scene {
 
     // --- Rush movement + attack for P2 ---
     if (f2) {
-      if (p2HasRun) {
+      if (p2Ranged) {
+        // Ranged: attack in place, no rush
+        this.playAttackChain(this.p2Sprite, 'duel_p2', lvl2, null, this.p2Def);
+      } else if (p2HasRun) {
         this.p2Sprite.play('duel_p2_run');
         this.tweens.add({
           targets: this.p2Sprite, x: p2TargetX,
@@ -1306,7 +1635,7 @@ class DuelScene extends Phaser.Scene {
       // Flight trait: use flight anim instead of shield
       if (this.p2Def.trait === 'flight' && this.anims.exists('duel_p2_flight')) {
         this.p2Sprite.play('duel_p2_flight');
-      } else {
+      } else if (this.anims.exists('duel_p2_shield')) {
         this.p2Sprite.play('duel_p2_shield');
       }
       if (this.p2Def.trait === 'magic_shield') {
@@ -1314,19 +1643,124 @@ class DuelScene extends Phaser.Scene {
       }
     }
 
-    // Recharge FX (particle flames only — skip if magic attack)
+
+    // PROJECTILE action (key 4/R or 0) — fires the character's projectile at full range
+    // Kitsune x1: cast attack3 + fire1 projectile
+    // Kitsune x2: cast attack3 + fire1, then attack2 + fire2
+    // Magician: cast magic_sphere + charDef projectile
+    const projDelay = 200;
+    const _spawnProj = (pNum, projLvl, outfit, charDef, startX, targetX, flipX) => {
+      const tag = this._charLoadTag(charDef, outfit);
+      const isKitsuneProj = !!(outfit && outfit.projectile1);
+      const prefix = 'duel_p' + pNum;
+
+      // Cast animation
+      this.time.delayedCall(projDelay, () => {
+        if (this.anims.exists(prefix + '_magic_sphere')) {
+          // Magician cast
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          sp.play(prefix + '_magic_sphere');
+        } else if (isKitsuneProj) {
+          // Kitsune: always play attack3 first
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          sp.play(prefix + '_attack3');
+        } else {
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          sp.play(prefix + '_attack1');
+        }
+      });
+
+      // First projectile (fire1 for Kitsune, or charDef projectile)
+      this.time.delayedCall(projDelay + 400, () => {
+        this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
+        let projKey = null, animKey = null;
+        if (outfit && outfit.projectile1) {
+          const pdef = outfit.projectile1;
+          projKey = 'duel_' + tag + '_' + pdef.sheet;
+          animKey = prefix + '_projectile1';
+        } else if (charDef.projectile) {
+          projKey = 'duel_' + tag + '_' + charDef.projectile.sheet;
+          animKey = prefix + '_projectile';
+        }
+        if (projKey) {
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          const proj = this.add.sprite(startX + (flipX ? -80 : 80), sp.y - 40, projKey, 0);
+          proj.setScale(DUEL_PLAYER_SCALE);
+          if (flipX) proj.setFlipX(true);
+          proj.setDepth(320);
+          if (animKey && this.anims.exists(animKey)) proj.play(animKey);
+          this.tweens.add({
+            targets: proj, x: targetX, duration: 400, ease: 'Power2',
+            onComplete: () => { proj.destroy(); }
+          });
+        }
+      });
+
+      // Second projectile (fire2 for Kitsune x2 only)
+      if (projLvl >= 2 && outfit && outfit.projectile2) {
+        this.time.delayedCall(projDelay + 200, () => {
+          // Second cast anim: attack2
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          sp.play(prefix + '_attack2');
+        });
+        this.time.delayedCall(projDelay + 600, () => {
+          this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
+          const pdef2 = outfit.projectile2;
+          const projKey2 = 'duel_' + tag + '_' + pdef2.sheet;
+          const animKey2 = prefix + '_projectile2';
+          const sp = pNum === 1 ? this.p1Sprite : this.p2Sprite;
+          const proj2 = this.add.sprite(startX + (flipX ? -80 : 80), sp.y - 60, projKey2, 0);
+          proj2.setScale(DUEL_PLAYER_SCALE);
+          if (flipX) proj2.setFlipX(true);
+          proj2.setDepth(321);
+          if (this.anims.exists(animKey2)) proj2.play(animKey2);
+          this.tweens.add({
+            targets: proj2, x: targetX, duration: 400, ease: 'Power2',
+            onComplete: () => { proj2.destroy(); }
+          });
+        });
+      }
+
+      // Impact / hurt
+      if (!this._projCancel) {
+        const impactDelay = projLvl >= 2 ? projDelay + 1100 : projDelay + 900;
+        this.time.delayedCall(impactDelay, () => {
+          this.sound.play('duel_sword', { volume: AUDIO_SETTINGS.sfxVolume });
+          const targetNum = pNum === 1 ? 2 : 1;
+          const targetData = targetNum === 1 ? this.p1 : this.p2;
+          const targetSprite = targetNum === 1 ? this.p1Sprite : this.p2Sprite;
+          if (targetData.lives > 0) targetSprite.play('duel_p' + targetNum + '_hurt');
+          else targetSprite.play('duel_p' + targetNum + '_dead');
+          this.time.delayedCall(600, () => { if (targetData.lives > 0) this._playIdle(targetNum); });
+        });
+      }
+    };
+
+    if (this._p1ProjectileFired) {
+      const targetX1 = this._projCancel ? (p1StartX + p2StartX) / 2 : p2StartX;
+      _spawnProj(1, projLvl1, this.p1Outfit, this.p1Def, p1StartX, targetX1, false);
+    }
+    if (this._p2ProjectileFired) {
+      const targetX2 = this._projCancel ? (p1StartX + p2StartX) / 2 : p1StartX;
+      _spawnProj(2, projLvl2, this.p2Outfit, this.p2Def, p2StartX, targetX2, true);
+    }
+
+    // Recharge FX (particle flames)
     const rechargeFxDuration = 1200;
-    if (a1 === DUEL_ACTIONS.RECHARGER && !this._p1MagicAttack) {
+    if (a1 === DUEL_ACTIONS.RECHARGER) {
       this.spawnFlameEffect(this.p1Sprite, 'red', rechargeFxDuration);
     }
-    if (a2 === DUEL_ACTIONS.RECHARGER && !this._p2MagicAttack) {
+    if (a2 === DUEL_ACTIONS.RECHARGER) {
       this.spawnFlameEffect(this.p2Sprite, 'red', rechargeFxDuration);
     }
+    // Projectile action FX — purple/blue cast glow
+    if (this._p1ProjectileFired) this.spawnFlameEffect(this.p1Sprite, 'blue', 800);
+    if (this._p2ProjectileFired) this.spawnFlameEffect(this.p2Sprite, 'blue', 800);
     // magic_shield: Protéger recharges only when attacked — show flame FX
-    if (this.p1Def.trait === 'magic_shield' && a1 === P && (f2 || this._p2MagicAttack)) {
+    if (this.p1Def.trait === 'magic_shield' && a1 === P && (f2 || proj2)) {
       this.spawnFlameEffect(this.p1Sprite, 'red', rechargeFxDuration);
     }
-    if (this.p2Def.trait === 'magic_shield' && a2 === P && (f1 || this._p1MagicAttack)) {
+    if (this.p2Def.trait === 'magic_shield' && a2 === P && (f1 || proj1)) {
       this.spawnFlameEffect(this.p2Sprite, 'red', rechargeFxDuration);
     }
 
@@ -1357,61 +1791,13 @@ class DuelScene extends Phaser.Scene {
       });
     }
 
-    // Magic attack animations (magic_shield trait)
-    const magicCastDelay = 200;
-    const magicProjectileDelay = magicCastDelay + 400;
-    const magicTweenDuration = 500;
-    const magicImpactDelay = magicProjectileDelay + magicTweenDuration;
-    if (this._p1MagicAttack) {
-      // Mage plays magic_sphere anim
-      this.time.delayedCall(magicCastDelay, () => {
-        if (this.anims.exists('duel_p1_magic_sphere')) {
-          this.p1Sprite.play('duel_p1_magic_sphere');
-        }
-      });
-      // Spawn projectile and tween toward opponent
-      this.time.delayedCall(magicProjectileDelay, () => {
-        this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
-        const projKey = 'duel_' + this._charLoadTag(this.p1Def, this.p1Outfit) + '_' + this.p1Def.projectile.sheet;
-        const proj = this.add.sprite(p1StartX + 80, this.p1Sprite.y - 40, projKey, 0);
-        proj.setScale(DUEL_PLAYER_SCALE);
-        proj.setDepth(320);
-        if (this.anims.exists('duel_p1_projectile')) proj.play('duel_p1_projectile');
-        this.tweens.add({
-          targets: proj, x: p2StartX, duration: magicTweenDuration, ease: 'Power2',
-          onComplete: () => { proj.destroy(); }
-        });
-      });
-      // Impact: hurt on opponent (no slash FX — projectile IS the visual)
-      this.time.delayedCall(magicImpactDelay, () => {
-        this.sound.play('duel_sword', { volume: AUDIO_SETTINGS.sfxVolume });
-        if (this.p2.lives > 0) this.p2Sprite.play('duel_p2_hurt');
-        else this.p2Sprite.play('duel_p2_dead');
-      });
-    }
-    if (this._p2MagicAttack) {
-      this.time.delayedCall(magicCastDelay, () => {
-        if (this.anims.exists('duel_p2_magic_sphere')) {
-          this.p2Sprite.play('duel_p2_magic_sphere');
-        }
-      });
-      this.time.delayedCall(magicProjectileDelay, () => {
-        this.sound.play('magic_spell', { volume: AUDIO_SETTINGS.sfxVolume });
-        const projKey = 'duel_' + this._charLoadTag(this.p2Def, this.p2Outfit) + '_' + this.p2Def.projectile.sheet;
-        const proj = this.add.sprite(p2StartX - 80, this.p2Sprite.y - 40, projKey, 0);
-        proj.setScale(DUEL_PLAYER_SCALE);
-        proj.setFlipX(true);
-        proj.setDepth(320);
-        if (this.anims.exists('duel_p2_projectile')) proj.play('duel_p2_projectile');
-        this.tweens.add({
-          targets: proj, x: p1StartX, duration: magicTweenDuration, ease: 'Power2',
-          onComplete: () => { proj.destroy(); }
-        });
-      });
-      this.time.delayedCall(magicImpactDelay, () => {
-        this.sound.play('duel_sword', { volume: AUDIO_SETTINGS.sfxVolume });
-        if (this.p1.lives > 0) this.p1Sprite.play('duel_p1_hurt');
-        else this.p1Sprite.play('duel_p1_dead');
+    // Projectile collision — fumée au milieu dans tous les cas si les deux tirent
+    if (this._p1ProjectileFired && this._p2ProjectileFired) {
+      const midX = (p1StartX + p2StartX) / 2;
+      this.time.delayedCall(projDelay + 600, () => {
+        this.playFx('fx_anim_smoke2', midX, this.p1Sprite.y - 40, 0.5, false, 325, 0);
+        this.playFx('fx_anim_smoke2', midX, this.p1Sprite.y - 60, 0.4, false, 326, 0);
+        this.sound.play('duel_punch', { volume: AUDIO_SETTINGS.sfxVolume });
       });
     }
 
@@ -1502,7 +1888,7 @@ class DuelScene extends Phaser.Scene {
           this.tweens.add({
             targets: this.p1Sprite, x: p1StartX,
             duration: walkDuration, ease: 'Power2',
-            onComplete: () => { this.p1Sprite.play('duel_p1_idle'); }
+            onComplete: () => { this._playIdle(1); }
           });
         }
       });
@@ -1536,8 +1922,27 @@ class DuelScene extends Phaser.Scene {
           this.tweens.add({
             targets: this.p2Sprite, x: p2StartX,
             duration: walkDuration, ease: 'Power2',
-            onComplete: () => { this.p2Sprite.play('duel_p2_idle'); }
+            onComplete: () => { this._playIdle(2); }
           });
+        }
+      });
+    }
+
+    // life_restore: restauration de vie — flamme verte + son
+    const restoreDelay = 400;
+    if (this._p1LifeRestore) {
+      this.time.delayedCall(restoreDelay, () => {
+        this.spawnFlameEffect(this.p1Sprite, 'green', 1000);
+        if (this.cache.audio.exists('peasant_special')) {
+          this.sound.play('peasant_special', { volume: Math.min(1, AUDIO_SETTINGS.sfxVolume * 1.5) });
+        }
+      });
+    }
+    if (this._p2LifeRestore) {
+      this.time.delayedCall(restoreDelay, () => {
+        this.spawnFlameEffect(this.p2Sprite, 'green', 1000);
+        if (this.cache.audio.exists('peasant_special')) {
+          this.sound.play('peasant_special', { volume: Math.min(1, AUDIO_SETTINGS.sfxVolume * 1.5) });
         }
       });
     }
@@ -1555,7 +1960,7 @@ class DuelScene extends Phaser.Scene {
         else this.p2Sprite.play('duel_p2_dead');
       });
       this.time.delayedCall(shieldCounterDelay + 600, () => {
-        if (this.p1.lives > 0) this.p1Sprite.play('duel_p1_idle');
+        if (this.p1.lives > 0) this._playIdle(1);
       });
     }
     if (this._p2ShieldCounter) {
@@ -1569,7 +1974,7 @@ class DuelScene extends Phaser.Scene {
         else this.p1Sprite.play('duel_p1_dead');
       });
       this.time.delayedCall(shieldCounterDelay + 600, () => {
-        if (this.p2.lives > 0) this.p2Sprite.play('duel_p2_idle');
+        if (this.p2.lives > 0) this._playIdle(2);
       });
     }
 
@@ -1613,28 +2018,27 @@ class DuelScene extends Phaser.Scene {
     // Return movement after resolution (skip dead players — let them stay where they fell)
     if (hasRush) {
       this.time.delayedCall(hurtDelay + 400, () => {
-        if (f1 && p1HasRun && this.p1.lives > 0) {
+        if (f1 && !p1Ranged && p1HasRun && this.p1.lives > 0) {
           this.p1Sprite.play('duel_p1_run');
           this.tweens.add({
             targets: this.p1Sprite, x: p1StartX,
             duration: returnDuration, ease: 'Power2',
-            onComplete: () => { this.p1Sprite.play('duel_p1_idle'); }
+            onComplete: () => { this._playIdle(1); }
           });
         }
-        if (f2 && p2HasRun && this.p2.lives > 0) {
+        if (f2 && !p2Ranged && p2HasRun && this.p2.lives > 0) {
           this.p2Sprite.play('duel_p2_run');
           this.tweens.add({
             targets: this.p2Sprite, x: p2StartX,
             duration: returnDuration, ease: 'Power2',
-            onComplete: () => { this.p2Sprite.play('duel_p2_idle'); }
+            onComplete: () => { this._playIdle(2); }
           });
         }
       });
     }
 
-    // Wait longer for higher level attacks + rush + magic attack before next turn
-    const magicExtra = (this._p1MagicAttack || this._p2MagicAttack) ? magicImpactDelay + 400 : 0;
-    const resolveWait = Math.max(DUEL_NEXT_TURN_DELAY + rush + returnDuration + (maxLvl - 1) * 400, magicExtra + DUEL_NEXT_TURN_DELAY);
+    // Wait longer for higher level attacks + rush before next turn
+    const resolveWait = DUEL_NEXT_TURN_DELAY + rush + returnDuration + (maxLvl - 1) * 400;
     this.time.delayedCall(resolveWait, () => {
       if (this.p1.lives <= 0 || this.p2.lives <= 0) {
         this.showGameOver();
@@ -1837,6 +2241,7 @@ class DuelScene extends Phaser.Scene {
     this._defeatObjects.forEach(o => o.destroy());
     this._defeatMenuActive = false;
     this.stopDuelMusic();
+    const _p2ColorOverride = this.p2Def.color !== this.p2Color ? this.p2Color : null;
     if (choice === 'RECOMMENCER') {
       if (this._defeatArcade) {
         this.scene.start('DuelScene', {
@@ -1849,9 +2254,10 @@ class DuelScene extends Phaser.Scene {
           arcadeOpponents: this.arcadeOpponents,
           arcadeIndex: this.arcadeIndex,
           stageIndex: this.stageIndex,
+          p2Color: _p2ColorOverride,
         });
       } else {
-        this.scene.restart({ p1: this.p1Def, p2: this.p2Def, p1Outfit: this.p1Outfit, p2Outfit: this.p2Outfit, vsAI: true, stageIndex: this.stageIndex });
+        this.scene.restart({ p1: this.p1Def, p2: this.p2Def, p1Outfit: this.p1Outfit, p2Outfit: this.p2Outfit, vsAI: true, stageIndex: this.stageIndex, p2Color: _p2ColorOverride });
       }
     } else if (choice === 'SÉLECTION') {
       this.scene.start('DuelSelectScene', { skipToCharSelect: true, vsAI: true });
@@ -2012,28 +2418,40 @@ class DuelScene extends Phaser.Scene {
     addHelpTxt(w / 2, top + 30, 'Chaque joueur a 3 vies. Dernier debout gagne !', '12px', '#cccccc');
 
     addHelpTxt(w / 2, top + 58, '── ACTIONS ──', '14px', '#ffcc00');
-    addHelpTxt(w / 2, top + 77, 'RECHARGER — Gagne 1 charge', '11px', '#44dd44');
+    addHelpTxt(w / 2, top + 77, 'RECHARGER — Gagne 1 mana', '11px', '#44dd44');
     addHelpTxt(w / 2, top + 93, 'PROTÉGER  — Bloque une attaque', '11px', '#4488ff');
-    addHelpTxt(w / 2, top + 109, 'FRAPPER   — Utilise 1 charge, retire 1 vie', '11px', '#ff4444');
+    addHelpTxt(w / 2, top + 109, 'FRAPPER   — Utilise 1 mana, retire 1 vie', '11px', '#ff4444');
 
-    addHelpTxt(w / 2, top + 135, '── SUPER ATTAQUE ──', '14px', '#ff00ff');
-    addHelpTxt(w / 2, top + 154, 'Appuyez plusieurs fois sur Frapper !', '11px', '#ddaaff');
-    addHelpTxt(w / 2, top + 170, 'x2 = 2 charges  |  x3 = 3 charges (KO !)', '10px', '#ff8844');
+    const helpHasProj = this._charHasProjectile(this.p1Def, this.p1Outfit) || this._charHasProjectile(this.p2Def, this.p2Outfit);
+    if (helpHasProj) {
+      addHelpTxt(w / 2, top + 123, 'PROJECTILE — 4 mana, perce garde (1v) sinon 2v', '10px', '#cc88ff');
+    }
 
-    addHelpTxt(w / 2, top + 200, '── TOUCHES ──', '14px', '#ffcc00');
-    addHelpTxt(w / 2 - 120, top + 222, 'JOUEUR 1', '12px', this.p1Def.color);
-    addHelpTxt(w / 2 - 120, top + 238, '1/A: Recharger', '10px', '#aaaacc');
-    addHelpTxt(w / 2 - 120, top + 252, '2/Z: Protéger', '10px', '#aaaacc');
-    addHelpTxt(w / 2 - 120, top + 266, '3/E: Frapper (x1/x2/x3)', '10px', '#aaaacc');
+    const superHelpY = helpHasProj ? top + 141 : top + 135;
+    addHelpTxt(w / 2, superHelpY, '── SUPER ATTAQUE ──', '14px', '#ff00ff');
+    addHelpTxt(w / 2, superHelpY + 19, 'Appuyez plusieurs fois sur Frapper !', '11px', '#ddaaff');
+    addHelpTxt(w / 2, superHelpY + 35, 'x2 = 2 mana  |  x3 = 3 mana (KO !)', '10px', '#ff8844');
+
+    addHelpTxt(w / 2, superHelpY + 61, '── TOUCHES ──', '14px', '#ffcc00');
+    addHelpTxt(w / 2 - 120, superHelpY + 83, 'JOUEUR 1', '12px', this.p1Def.color);
+    addHelpTxt(w / 2 - 120, superHelpY + 99, '1/A: Recharger', '10px', '#aaaacc');
+    addHelpTxt(w / 2 - 120, superHelpY + 113, '2/Z: Protéger', '10px', '#aaaacc');
+    addHelpTxt(w / 2 - 120, superHelpY + 127, '3/E: Frapper (x1/x2/x3)', '10px', '#aaaacc');
+    if (this._charHasProjectile(this.p1Def, this.p1Outfit)) {
+      addHelpTxt(w / 2 - 120, superHelpY + 141, '4/R: Projectile', '10px', '#cc88ff');
+    }
 
     if (!this.vsAI) {
-      addHelpTxt(w / 2 + 120, top + 222, 'JOUEUR 2', '12px', this.p2Def.color);
-      addHelpTxt(w / 2 + 120, top + 238, '7: Recharger', '10px', '#aaaacc');
-      addHelpTxt(w / 2 + 120, top + 252, '8: Protéger', '10px', '#aaaacc');
-      addHelpTxt(w / 2 + 120, top + 266, '9: Frapper (x1/x2/x3)', '10px', '#aaaacc');
+      addHelpTxt(w / 2 + 120, superHelpY + 83, 'JOUEUR 2', '12px', this.p2Color);
+      addHelpTxt(w / 2 + 120, superHelpY + 99, '7: Recharger', '10px', '#aaaacc');
+      addHelpTxt(w / 2 + 120, superHelpY + 113, '8: Protéger', '10px', '#aaaacc');
+      addHelpTxt(w / 2 + 120, superHelpY + 127, '9: Frapper (x1/x2/x3)', '10px', '#aaaacc');
+      if (this._charHasProjectile(this.p2Def, this.p2Outfit)) {
+        addHelpTxt(w / 2 + 120, superHelpY + 141, '0: Projectile', '10px', '#cc88ff');
+      }
     } else {
-      addHelpTxt(w / 2 + 120, top + 222, 'IA', '12px', this.p2Def.color);
-      addHelpTxt(w / 2 + 120, top + 242, 'Joue automatiquement', '10px', '#aaaacc');
+      addHelpTxt(w / 2 + 120, superHelpY + 83, 'IA', '12px', this.p2Color);
+      addHelpTxt(w / 2 + 120, superHelpY + 103, 'Joue automatiquement', '10px', '#aaaacc');
     }
 
     const hint = addHelpTxt(w / 2, top + 310, 'ESC ou ENTER : Retour', '12px', '#555577');
@@ -2077,7 +2495,13 @@ class DuelScene extends Phaser.Scene {
 
     addCharTxt(w / 2, h / 2 - 280, '── PERSONNAGES ──', '22px', '#ffcc00');
 
-    const allChars = [...Object.values(CHARACTERS), ...Object.values(GHOST_CHARACTERS), ...(CHEAT_SETTINGS.magikUnlocked ? Object.values(HIDDEN_CHARACTERS) : [])];
+    const allChars = [
+      ...Object.values(CHARACTERS),
+      ...Object.values(GHOST_CHARACTERS),
+      ...(CHEAT_SETTINGS.magikUnlocked ? [HIDDEN_CHARACTERS.Wanderer_Magician] : []),
+      ...(CHEAT_SETTINGS.villageUnlocked ? [HIDDEN_CHARACTERS.Kunoichi, HIDDEN_CHARACTERS.Ninja_Peasant] : []),
+      ...(CHEAT_SETTINGS.yokaiUnlocked ? [HIDDEN_CHARACTERS.Yokai] : []),
+    ];
     const listX = w / 2 - 220;
     let listY = h / 2 - 238;
     const listRowH = 60;
@@ -2170,7 +2594,8 @@ class DuelScene extends Phaser.Scene {
       p1Outfit: this.p1Outfit,
       p2Outfit: this.p2Outfit,
       vsAI: this.vsAI,
-      stageIndex: this.stageIndex
+      stageIndex: this.stageIndex,
+      p2Color: this.p2Def.color !== this.p2Color ? this.p2Color : null,
     });
   }
 
@@ -2193,6 +2618,16 @@ class DuelScene extends Phaser.Scene {
   // ---- AI logic ----
   setAIChoice(action) {
     if (this.turnPhase !== 'input' || this.p2.ready) return;
+    // For PROJECTILE: validate cost and resolve x1 vs x2 like setPlayerChoice does
+    if (action === DUEL_ACTIONS.PROJECTILE) {
+      const isKitsuneOutfit = !!(this.p2Outfit && this.p2Outfit.projectile1);
+      const projCost = isKitsuneOutfit ? 3 : 4;
+      if (this.p2.charges < projCost) {
+        action = DUEL_ACTIONS.RECHARGER; // fallback
+      } else if (isKitsuneOutfit && this.p2.charges >= 4) {
+        action = DUEL_ACTIONS.PROJECTILE2;
+      }
+    }
     this.p2.choice = action;
     this.p2.ready = true;
     this.p2ChoiceText.setText('...').setColor('#ffcc00');
@@ -2210,11 +2645,20 @@ class DuelScene extends Phaser.Scene {
     const hasBonusDmg = this.p2Def.trait === 'attack_x4';
     const hasMimicry = this.p2Def.trait === 'mimicry';
     const hasDisguise = this.p2Def.trait === 'disguise';
-    const hasMagicShield = this.p2Def.trait === 'magic_shield';
-    const limitX2 = hasMimicry || hasDisguise || hasMagicShield;
+    const hasMagicShield  = this.p2Def.trait === 'magic_shield';
+    const hasLifeRestore  = this.p2Def.trait === 'life_restore';
+    const hasProjectile = this._charHasProjectile(this.p2Def, this.p2Outfit);
+    const isKitsuneOutfit = !!(this.p2Outfit && this.p2Outfit.projectile1);
+    const projCost = isKitsuneOutfit ? 3 : 4;
+    const limitX2 = hasMimicry || hasDisguise || hasMagicShield || isKitsuneOutfit;
     const maxCharges = limitX2 ? 2 : 3;
     // Samurai deals charges+1 damage, others deal charges damage
     const dmgAt = (charges) => charges + (hasBonusDmg ? 1 : 0);
+
+    // Can finish with projectile?
+    if (hasProjectile && myCharges >= projCost && projCost <= enemyLives && roll < 0.55) {
+      return DUEL_ACTIONS.PROJECTILE;
+    }
 
     // Can finish with super attack?
     if (dmgAt(myCharges) >= enemyLives && myCharges >= 1) {
@@ -2235,31 +2679,31 @@ class DuelScene extends Phaser.Scene {
     const hasJumpDodge = this.p2Def.trait === 'jump_dodge';
 
     // magic_shield AI :
-    //   Cap 1 — Protéger si attaqué → +1 charge passif + contre-attaque magique (-1 vie, coûte 1 charge)
-    //   Cap 2 — Recharger avec ≥3 charges → attaque spéciale perce-garde + soin
+    //   Cap 1 — Protéger si attaqué → +1 mana passif + contre-attaque magique (-1 vie, coûte 1 mana)
+    //   Cap 2 — Projectile via touche dédiée (≥4 mana)
     //   Imprévisible : les probabilités varient selon le contexte mais gardent une variance
     if (hasMagicShield) {
       const enemyThreat = enemyCharges >= 1; // l'ennemi peut frapper → Protéger offensif
-      if (myCharges >= 3) {
-        // Spéciale disponible — priorité haute
+      if (myCharges >= 4) {
+        // Projectile disponible — priorité haute
         const roll2 = Math.random();
-        if (roll2 < 0.75) return DUEL_ACTIONS.RECHARGER;       // attaque magique
+        if (roll2 < 0.75) return DUEL_ACTIONS.PROJECTILE;      // tir magique
         if (enemyThreat && roll2 < 0.90) return DUEL_ACTIONS.PROTEGER; // contre + recharge
         return DUEL_ACTIONS.FRAPPER2;                           // feinte agressive rare
-      } else if (myCharges === 2) {
+      } else if (myCharges >= 2) {
         if (enemyThreat) {
           // Protéger = contre-attaque + recharge +1 = très rentable
           if (roll < 0.60) return DUEL_ACTIONS.PROTEGER;
           if (roll < 0.90) return DUEL_ACTIONS.RECHARGER;
           return DUEL_ACTIONS.FRAPPER2;                         // feinte
         } else {
-          // Pas de menace → Protéger inutile, recharger ou feinte
+          // Pas de menace → recharger ou feinte
           if (roll < 0.80) return DUEL_ACTIONS.RECHARGER;
           return DUEL_ACTIONS.FRAPPER2;
         }
       } else if (myCharges === 1) {
         if (enemyThreat) {
-          // Protéger = contre-attaque (net 0 charge consommée) — très agressif
+          // Protéger = contre-attaque (net 0 mana consommée) — très agressif
           if (roll < 0.65) return DUEL_ACTIONS.PROTEGER;
           if (roll < 0.90) return DUEL_ACTIONS.RECHARGER;
           return DUEL_ACTIONS.FRAPPER;                          // feinte imprévisible
@@ -2269,7 +2713,7 @@ class DuelScene extends Phaser.Scene {
           return DUEL_ACTIONS.PROTEGER;
         }
       } else {
-        // 0 charge — doit recharger, mais Protéger donne +1 si attaqué
+        // 0 mana — doit recharger, mais Protéger donne +1 si attaqué
         if (enemyThreat) {
           if (roll < 0.55) return DUEL_ACTIONS.PROTEGER;        // +1 gratuit dès le départ
           return DUEL_ACTIONS.RECHARGER;
@@ -2277,6 +2721,28 @@ class DuelScene extends Phaser.Scene {
           return DUEL_ACTIONS.RECHARGER;
         }
       }
+    }
+
+    // life_restore AI: 4 recharges consécutives → +1 vie (désactivé pour Kitsune)
+    if (hasLifeRestore && !isKitsuneOutfit) {
+      const streak = this.p2.chargeStreak || 0;
+      // Si on est lancé dans une série, continuer sauf si danger immédiat
+      if (streak >= 1 && this.p2.lives > 1) {
+        // 3 recharges déjà faites → terminer la série (sauf danger)
+        if (streak >= 3) {
+          if (roll < 0.85) return DUEL_ACTIONS.RECHARGER;
+        }
+        if (roll < 0.70) return DUEL_ACTIONS.RECHARGER;
+        if (roll < 0.88) return DUEL_ACTIONS.PROTEGER;
+        return DUEL_ACTIONS.FRAPPER;
+      }
+      // Comportement normal avec biais vers recharge
+      if (myCharges <= 0) return roll < 0.75 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.PROTEGER;
+      if (myCharges >= 3 && roll < 0.35) return DUEL_ACTIONS.FRAPPER3;
+      if (myCharges >= 2 && roll < 0.25) return DUEL_ACTIONS.FRAPPER2;
+      if (roll < 0.50) return DUEL_ACTIONS.RECHARGER;
+      if (roll < 0.70) return DUEL_ACTIONS.PROTEGER;
+      return DUEL_ACTIONS.FRAPPER;
     }
 
     if (myCharges <= 0 && enemyCharges <= 0) {
@@ -2296,9 +2762,11 @@ class DuelScene extends Phaser.Scene {
       return roll < 0.65 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.PROTEGER;
     } else if (enemyCharges <= 0) {
       // Try super attacks if enough charges
+      if (hasProjectile && myCharges >= projCost && roll < 0.30) return DUEL_ACTIONS.PROJECTILE;
       if (!limitX2 && myCharges >= 3 && roll < 0.25) return DUEL_ACTIONS.FRAPPER3;
       if (!limitX2 && myCharges >= 2 && roll < 0.40) return DUEL_ACTIONS.FRAPPER2;
-      if (limitX2 && myCharges >= 2 && roll < 0.40) return DUEL_ACTIONS.FRAPPER2;
+      if (limitX2 && !isKitsuneOutfit && myCharges >= 2 && roll < 0.40) return DUEL_ACTIONS.FRAPPER2;
+      if (isKitsuneOutfit && myCharges >= 1 && roll < 0.40) return DUEL_ACTIONS.FRAPPER;
       // Mimicry: enemy has no charges, likely to recharge — mirror them
       if (hasMimicry) return roll < 0.60 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.FRAPPER;
       // Disguise: protect to surprise attack recharging enemy
@@ -2306,9 +2774,11 @@ class DuelScene extends Phaser.Scene {
       return roll < 0.55 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.FRAPPER;
     } else {
       // Both have charges
+      if (hasProjectile && myCharges >= projCost && roll < 0.20) return DUEL_ACTIONS.PROJECTILE;
       if (!limitX2 && myCharges >= 3 && roll < 0.15) return DUEL_ACTIONS.FRAPPER3;
       if (!limitX2 && myCharges >= 2 && roll < 0.20) return DUEL_ACTIONS.FRAPPER2;
-      if (limitX2 && myCharges >= 2 && roll < 0.25) return DUEL_ACTIONS.FRAPPER2;
+      if (limitX2 && !isKitsuneOutfit && myCharges >= 2 && roll < 0.25) return DUEL_ACTIONS.FRAPPER2;
+      if (isKitsuneOutfit && myCharges >= 1 && roll < 0.25) return DUEL_ACTIONS.FRAPPER;
       if (hasDisguise) {
         if (roll < 0.35) return DUEL_ACTIONS.PROTEGER;
         if (roll < 0.55) return DUEL_ACTIONS.RECHARGER;
@@ -2473,7 +2943,7 @@ class DuelScene extends Phaser.Scene {
 
     if (this.turnPhase !== 'input') return;
 
-    // P1 input: 1/A = Recharger, 2/Z = Protéger, 3/E = Frapper
+    // P1 input: 1/A = Recharger, 2/Z = Protéger, 3/E = Frapper, 4/R = Projectile
     if (Phaser.Input.Keyboard.JustDown(this.keyOne) || Phaser.Input.Keyboard.JustDown(this.keyA)) {
       this.setPlayerChoice(1, DUEL_ACTIONS.RECHARGER);
     }
@@ -2482,6 +2952,9 @@ class DuelScene extends Phaser.Scene {
     }
     if (Phaser.Input.Keyboard.JustDown(this.keyThree) || Phaser.Input.Keyboard.JustDown(this.keyE)) {
       this.setPlayerChoice(1, DUEL_ACTIONS.FRAPPER);
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyFour) || Phaser.Input.Keyboard.JustDown(this.keyR)) {
+      this.setPlayerChoice(1, DUEL_ACTIONS.PROJECTILE);
     }
 
     // P2 input (PvP) or AI
@@ -2494,6 +2967,9 @@ class DuelScene extends Phaser.Scene {
       }
       if (Phaser.Input.Keyboard.JustDown(this.keyNine)) {
         this.setPlayerChoice(2, DUEL_ACTIONS.FRAPPER);
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyZero)) {
+        this.setPlayerChoice(2, DUEL_ACTIONS.PROJECTILE);
       }
     } else {
       // AI plays after P1 chooses

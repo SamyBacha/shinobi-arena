@@ -1,0 +1,1 @@
+projectile nouvelle touche, consomme 4, retire 1 si guard 2 sinon

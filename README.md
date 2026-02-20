@@ -32,7 +32,8 @@ Enchaîne les adversaires dans un ordre fixe jusqu'au boss final — le **Wander
 | **Yurei** | Double recharge — chaque recharge donne 2 charges |
 | **Kunoichi** | Mimétisme — copier l'action adverse rapporte +1 charge bonus |
 | **Ninja Peasant** | Déguisement — garde/garde = +1 vie ; garde/recharge adverse = attaque surprise |
-| **Wanderer Magician** | Garde Arcanique — se protéger recharge ; 3 charges = attaque magique à distance |
+| **Wanderer Magician** | Garde Arcanique — se protéger si attaqué donne +1 mana + contre-attaque ; projectile via touche 4/R (J1) ou 0 (J2) |
+| **Yokai** | Âme Vengeresse (Karasu/Yamabushi) — commence avec 1 mana ; 4 recharges consécutives = +1 vie. Kitsune — frappe x1 corps à corps, projectile x1 (3 mana) ou x2 (4 mana), pas de soin |
 
 > Certains personnages sont verrouillés. Voir les **codes secrets** ci-dessous.
 
@@ -42,17 +43,25 @@ Enchaîne les adversaires dans un ordre fixe jusqu'au boss final — le **Wander
 
 Chaque joueur choisit une action en secret, puis les deux se révèlent simultanément :
 
-| Action | Effet |
-|---|---|
-| **Recharger** | Gagne 1 charge (ou 2 avec Yurei) |
-| **Protéger** | Bloque une attaque |
-| **Frapper x1/x2/x3** | Dépense des charges, retire des vies à l'adversaire |
+| Action | Coût | Effet |
+|---|---|---|
+| **Recharger** | — | Gagne 1 mana (ou 2 avec Yurei) |
+| **Protéger** | — | Bloque une attaque (réduit les dégâts d'un projectile à 1 vie) |
+| **Frapper x1/x2/x3** | 1/2/3 mana | Retire 1/2/3 vies à l'adversaire |
+| **Projectile** *(Magician, Kitsune)* | 4 mana (Kitsune: 3/4) | Retire **2 vies** ; si l'adversaire se protège : **1 vie** |
 
+- Projectile vs Projectile → les deux projectiles s'annulent au milieu, aucun dégât, perte de mana seulement
 - Attaque vs Attaque → les deux prennent des dégâts
 - Attaque vs Protection → dégâts bloqués
 - Attaque vs Recharge → l'adversaire prend des dégâts et sa recharge échoue
 
 Le dernier debout gagne !
+
+### Kitsune (outfit Yokai)
+- Frappe corps à corps limité à x1 (animation Attack_1, portée à distance)
+- Projectile x1 à 3 mana : animation Attack_3 + projectile Fire_1
+- Projectile x2 à 4 mana : Attack_3 + Fire_1, puis Attack_2 + Fire_2
+- Toutes les attaques s'effectuent à distance
 
 ---
 
@@ -64,9 +73,10 @@ Le dernier debout gagne !
 | `←` `→` | Déplacer |
 | `↑` | Sauter |
 | `Z` | Attaquer |
-| `1` | Recharger (duel) |
-| `2` | Protéger (duel) |
-| `3` | Frapper (duel) |
+| `1` ou `A` | Recharger (duel) |
+| `2` ou `Z` | Protéger (duel) |
+| `3` ou `E` | Frapper (duel — appuyer plusieurs fois pour x2/x3) |
+| `4` ou `R` | Projectile (duel — personnages éligibles uniquement) |
 | `ENTER` | Valider |
 | `ESC` | Pause / Retour |
 
@@ -75,7 +85,8 @@ Le dernier debout gagne !
 |---|---|
 | `7` | Recharger |
 | `8` | Protéger |
-| `9` | Frapper |
+| `9` | Frapper (appuyer plusieurs fois pour x2/x3) |
+| `0` | Projectile (personnages éligibles uniquement) |
 
 ---
 
@@ -88,6 +99,7 @@ Dans le menu principal, clique sur **"Code secret..."** en bas de l'écran, tape
 | `ghost` | Débloque Gotoku, Onre et Yurei |
 | `village` | Débloque Kunoichi et Ninja Peasant |
 | `magik` | Débloque le Wanderer Magician |
+| `yokai` | Débloque les Yokai (Karasu Tengu, Kitsune, Yamabushi Tengu) |
 | `badaboom` | Débloque **tous** les personnages d'un coup |
 | `finalfight` | Active le mode boss final direct en Arcade |
 

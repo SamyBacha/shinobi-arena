@@ -45,13 +45,13 @@ const ENEMY_RUN_SPEED = 200;
 // Arcade mode – fixed opponent order (player's own character is removed at runtime)
 const ARCADE_ORDER = [
   'Fighter', 'Kunoichi', 'Ninja_Peasant', 'Gotoku',
-  'Shinobi', 'Yurei', 'Onre', 'Wanderer_Magician',
+  'Shinobi', 'Yurei', 'Onre', 'Wanderer_Magician', 'Yokai',
 ];
 
 // Duel constants
 const DUEL_MAX_LIVES = 3;
-const DUEL_ACTIONS = { RECHARGER: 0, PROTEGER: 1, FRAPPER: 2, FRAPPER2: 3, FRAPPER3: 4, FRAPPER4: 5 };
-const DUEL_ACTION_LABELS = ['Recharger', 'Protéger', 'Frapper', 'Frapper x2', 'Frapper x3', 'Frapper x4'];
+const DUEL_ACTIONS = { RECHARGER: 0, PROTEGER: 1, FRAPPER: 2, FRAPPER2: 3, FRAPPER3: 4, FRAPPER4: 5, PROJECTILE: 6, PROJECTILE2: 7 };
+const DUEL_ACTION_LABELS = ['Recharger', 'Protéger', 'Frapper', 'Frapper x2', 'Frapper x3', 'Frapper x4', 'Projectile', 'Projectile x2'];
 const DUEL_PLAYER_SCALE = 2.5;
 const DUEL_HEART_SIZE = 28;
 const DUEL_RESOLVE_DELAY = 600;
@@ -72,7 +72,7 @@ const GRAPHICS_SETTINGS = {
 };
 
 // Cheat code settings
-const CHEAT_SETTINGS = { ghostsUnlocked: false, magikUnlocked: false, villageUnlocked: false, finalFight: false };
+const CHEAT_SETTINGS = { ghostsUnlocked: false, magikUnlocked: false, villageUnlocked: false, yokaiUnlocked: false, finalFight: false };
 
 // Trait descriptions for UI – short name + detailed explanation
 const TRAIT_LABELS = {
@@ -82,7 +82,7 @@ const TRAIT_LABELS = {
   },
   attack_x4: {
     short: 'Lame Aiguisée',
-    desc: 'Chaque frappe inflige +1 dégât bonus : x1 charge = 2 dégâts, x2 = 3 (KO), x3 = 4 dégâts.',
+    desc: 'Chaque frappe inflige +1 dégât bonus : x1 mana = 2 dégâts, x2 = 3 (KO), x3 = 4 dégâts.',
   },
   counter: {
     short: 'Riposte',
@@ -94,23 +94,27 @@ const TRAIT_LABELS = {
   },
   flight: {
     short: 'Contre-attaque',
-    desc: 'Si protège une attaque et possède ≥1 charge, consomme 1 charge et inflige 1 dégât.',
+    desc: 'Si protège une attaque et possède ≥1 mana, consomme 1 mana et inflige 1 dégât.',
   },
   double_charge: {
     short: 'Double Recharge',
-    desc: 'Chaque recharge donne 2 charges au lieu de 1.',
+    desc: 'Chaque recharge donne 2 mana au lieu de 1.',
   },
   mimicry: {
     short: 'Mimétisme',
-    desc: 'Si Kunoichi fait la même action que l\'adversaire (recharge, garde ou attaque), elle gagne +1 charge bonus. Limité à Frapper x2.',
+    desc: 'Si Kunoichi fait la même action que l\'adversaire (recharge, garde ou attaque), elle gagne +1 mana bonus. Limité à Frapper x2.',
   },
   disguise: {
     short: 'Déguisement',
-    desc: 'Garde vs Garde = +1 vie (max 3). Garde vs Recharge adverse = attaque surprise (-1 vie, coûte 1 charge). Limité à Frapper x2.',
+    desc: 'Garde vs Garde = +1 vie (max 3). Garde vs Recharge adverse = attaque surprise (-1 vie, coûte 1 mana). Limité à Frapper x2.',
   },
   magic_shield: {
     short: 'Garde Arcanique',
-    desc: 'Protéger si attaqué : +1 charge + contre-attaque magique (-1 vie attaquant, coûte 1 charge). Recharger avec ≥3 charges = attaque spéciale (perce garde, +1 vie). Max Frapper x2.',
+    desc: 'Protéger si attaqué : +1 mana + contre-attaque magique (-1 vie attaquant, coûte 1 mana). Projectile via touche 4/R (J1) ou 0 (J2). Max Frapper x2.',
+  },
+  life_restore: {
+    short: 'Âme Vengeresse',
+    desc: 'Commence avec 1 mana. Recharger 4 fois de suite (dépense 4 mana) restaure 1 vie. Kitsune : capacité inactive.',
   },
 };
 
@@ -272,6 +276,7 @@ const HIDDEN_CHARACTERS = {
   Kunoichi:          new KunoichiCharacter(),
   Ninja_Peasant:     new NinjaPeasantCharacter(),
   Wanderer_Magician: new WandererMagicianCharacter(),
+  Yokai:             new YokaiCharacter(),
 };
 
 // Ghost characters (duel-compatible, AI opponents only)
