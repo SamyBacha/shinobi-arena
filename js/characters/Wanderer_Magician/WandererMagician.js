@@ -45,4 +45,6 @@ class WandererMagicianCharacter extends CharacterDef {
       },
     });
   }
+
+  get maxLifeBonus() { return 1; }
 }

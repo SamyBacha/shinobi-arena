@@ -32,5 +32,5 @@ class FighterCharacter extends CharacterDef {
     });
   }
 
-  get maxLifeBonus() { return 1; }
+  get maxLifeBonus() { return 2; }
 }

@@ -344,12 +344,12 @@ class MenuScene extends Phaser.Scene {
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
 
-    // 7 rows: musique, effets, aide, --- séparateur, lissage, vignette, saturation, scanlines
+    // 8 rows: musique, effets, aide, boutons tactiles, --- séparateur, lissage, vignette, saturation, scanlines
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.88);
-    overlay.fillRoundedRect(w / 2 - 270, h / 2 - 300, 540, 600, 14);
+    overlay.fillRoundedRect(w / 2 - 270, h / 2 - 300, 540, 658, 14);
     overlay.lineStyle(2, 0x444488, 0.8);
-    overlay.strokeRoundedRect(w / 2 - 270, h / 2 - 300, 540, 600, 14);
+    overlay.strokeRoundedRect(w / 2 - 270, h / 2 - 300, 540, 658, 14);
     overlay.setDepth(500);
     this.optionsObjects.push(overlay);
 
@@ -387,40 +387,46 @@ class MenuScene extends Phaser.Scene {
     this.optionsObjects.push(this.hintCheckGfx);
     this.hintValText = addTxt(w / 2 + 170, h / 2 - 62, '', '16px', '#ffcc00');
 
-    // ── Graphismes ──
-    addTxt(w / 2, h / 2 + 0, '─── GRAPHISMES ───', '13px', '#555577');
+    addTxt(w / 2 - 160, h / 2 - 4, 'Boutons tactiles', '18px', '#ffffff');
+    this.touchBtnsCheckGfx = this.add.graphics().setDepth(502);
+    this.optionsObjects.push(this.touchBtnsCheckGfx);
+    this.touchBtnsValText = addTxt(w / 2 + 170, h / 2 - 4, '', '16px', '#ffcc00');
 
-    addTxt(w / 2 - 160, h / 2 + 32, 'Lissage', '18px', '#ffffff');
+    // ── Graphismes ──
+    addTxt(w / 2, h / 2 + 58, '─── GRAPHISMES ───', '13px', '#555577');
+
+    addTxt(w / 2 - 160, h / 2 + 90, 'Lissage', '18px', '#ffffff');
     this.smoothCheckGfx = this.add.graphics().setDepth(502);
     this.optionsObjects.push(this.smoothCheckGfx);
-    this.smoothValText = addTxt(w / 2 + 170, h / 2 + 32, '', '16px', '#ffcc00');
+    this.smoothValText = addTxt(w / 2 + 170, h / 2 + 90, '', '16px', '#ffcc00');
 
-    addTxt(w / 2 - 160, h / 2 + 90, 'Vignette', '18px', '#ffffff');
+    addTxt(w / 2 - 160, h / 2 + 148, 'Vignette', '18px', '#ffffff');
     this.vignetteBarBg = this.add.graphics().setDepth(501);
     this.vignetteBarFill = this.add.graphics().setDepth(502);
-    this.vignetteValText = addTxt(w / 2 + 170, h / 2 + 90, '', '16px', '#ffcc00');
+    this.vignetteValText = addTxt(w / 2 + 170, h / 2 + 148, '', '16px', '#ffcc00');
     this.optionsObjects.push(this.vignetteBarBg, this.vignetteBarFill);
 
-    addTxt(w / 2 - 160, h / 2 + 148, 'Saturation', '18px', '#ffffff');
+    addTxt(w / 2 - 160, h / 2 + 206, 'Saturation', '18px', '#ffffff');
     this.satBarBg = this.add.graphics().setDepth(501);
     this.satBarFill = this.add.graphics().setDepth(502);
-    this.satValText = addTxt(w / 2 + 170, h / 2 + 148, '', '16px', '#ffcc00');
+    this.satValText = addTxt(w / 2 + 170, h / 2 + 206, '', '16px', '#ffcc00');
     this.optionsObjects.push(this.satBarBg, this.satBarFill);
 
-    addTxt(w / 2 - 160, h / 2 + 206, 'Scanlines', '18px', '#ffffff');
+    addTxt(w / 2 - 160, h / 2 + 264, 'Scanlines', '18px', '#ffffff');
     this.scanCheckGfx = this.add.graphics().setDepth(502);
     this.optionsObjects.push(this.scanCheckGfx);
-    this.scanValText = addTxt(w / 2 + 170, h / 2 + 206, '', '16px', '#ffcc00');
+    this.scanValText = addTxt(w / 2 + 170, h / 2 + 264, '', '16px', '#ffcc00');
 
     // Option arrow
     this.optArrow = addTxt(0, 0, '▶', '18px', '#ff4444');
 
     // Hint
-    addTxt(w / 2, h / 2 + 268, '↑↓ : Sélection  |  ←→ : Régler  |  ENTER : Cocher', '12px', '#777799');
-    addTxt(w / 2, h / 2 + 284, 'ESC : Retour', '12px', '#777799');
+    addTxt(w / 2, h / 2 + 326, '↑↓ : Sélection  |  ←→ : Régler  |  ENTER : Cocher', '12px', '#777799');
+    addTxt(w / 2, h / 2 + 342, 'ESC : Retour', '12px', '#777799');
 
     this.drawOptionsBars();
     this.drawHintCheckbox();
+    this.drawTouchBtnsCheckbox();
     this.drawGraphicsControls();
     this.updateOptionsArrow();
   }
@@ -776,6 +782,23 @@ class MenuScene extends Phaser.Scene {
     this.hintValText.setText(DISPLAY_SETTINGS.showHints ? 'ON' : 'OFF');
   }
 
+  drawTouchBtnsCheckbox() {
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const cx = w / 2 - 70;
+    const cy = h / 2 - 13;
+    const size = 18;
+
+    this.touchBtnsCheckGfx.clear();
+    this.touchBtnsCheckGfx.lineStyle(2, 0xaaaaaa, 1);
+    this.touchBtnsCheckGfx.strokeRect(cx, cy, size, size);
+    if (DISPLAY_SETTINGS.touchButtons) {
+      this.touchBtnsCheckGfx.fillStyle(0x44dd44, 1);
+      this.touchBtnsCheckGfx.fillRect(cx + 3, cy + 3, size - 6, size - 6);
+    }
+    this.touchBtnsValText.setText(DISPLAY_SETTINGS.touchButtons ? 'ON' : 'OFF');
+  }
+
   drawGraphicsControls() {
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
@@ -786,7 +809,7 @@ class MenuScene extends Phaser.Scene {
 
     // Lissage checkbox
     const scx = w / 2 - 70;
-    const scy = h / 2 + 23;
+    const scy = h / 2 + 81;
     this.smoothCheckGfx.clear();
     this.smoothCheckGfx.lineStyle(2, 0xaaaaaa, 1);
     this.smoothCheckGfx.strokeRect(scx, scy, checkSize, checkSize);
@@ -799,33 +822,33 @@ class MenuScene extends Phaser.Scene {
     // Vignette bar (0 → 1)
     this.vignetteBarBg.clear();
     this.vignetteBarBg.fillStyle(0x333333, 0.9);
-    this.vignetteBarBg.fillRoundedRect(barX, h / 2 + 82, barW, barH, 4);
+    this.vignetteBarBg.fillRoundedRect(barX, h / 2 + 140, barW, barH, 4);
     this.vignetteBarFill.clear();
     this.vignetteBarFill.fillStyle(0xaa44ff, 1);
     const vw = Math.round(barW * GRAPHICS_SETTINGS.vignette);
-    if (vw > 0) this.vignetteBarFill.fillRoundedRect(barX, h / 2 + 82, vw, barH, 4);
+    if (vw > 0) this.vignetteBarFill.fillRoundedRect(barX, h / 2 + 140, vw, barH, 4);
     this.vignetteValText.setText(Math.round(GRAPHICS_SETTINGS.vignette * 100) + '%');
 
     // Saturation bar (-1 → +1, centre = 0)
     // Display: map -1..1 to 0..100%
     this.satBarBg.clear();
     this.satBarBg.fillStyle(0x333333, 0.9);
-    this.satBarBg.fillRoundedRect(barX, h / 2 + 140, barW, barH, 4);
+    this.satBarBg.fillRoundedRect(barX, h / 2 + 198, barW, barH, 4);
     this.satBarFill.clear();
     const satNorm = (GRAPHICS_SETTINGS.saturation + 1) / 2; // 0..1
     const satColor = GRAPHICS_SETTINGS.saturation >= 0 ? 0xffcc00 : 0x8888cc;
     this.satBarFill.fillStyle(satColor, 1);
     const satW = Math.round(barW * satNorm);
-    if (satW > 0) this.satBarFill.fillRoundedRect(barX, h / 2 + 140, satW, barH, 4);
+    if (satW > 0) this.satBarFill.fillRoundedRect(barX, h / 2 + 198, satW, barH, 4);
     // Centre marker
     this.satBarBg.lineStyle(1, 0x888888, 0.8);
-    this.satBarBg.lineBetween(barX + barW / 2, h / 2 + 140, barX + barW / 2, h / 2 + 140 + barH);
+    this.satBarBg.lineBetween(barX + barW / 2, h / 2 + 198, barX + barW / 2, h / 2 + 198 + barH);
     const satPct = Math.round(GRAPHICS_SETTINGS.saturation * 100);
     this.satValText.setText((satPct >= 0 ? '+' : '') + satPct + '%');
 
     // Scanlines checkbox
     const scanCx = w / 2 - 70;
-    const scanCy = h / 2 + 197;
+    const scanCy = h / 2 + 255;
     this.scanCheckGfx.clear();
     this.scanCheckGfx.lineStyle(2, 0xaaaaaa, 1);
     this.scanCheckGfx.strokeRect(scanCx, scanCy, checkSize, checkSize);
@@ -839,15 +862,16 @@ class MenuScene extends Phaser.Scene {
   updateOptionsArrow() {
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
-    // 7 navigable rows: 0=musique, 1=effets, 2=aide, 3=lissage, 4=vignette, 5=saturation, 6=scanlines
+    // 8 navigable rows: 0=musique, 1=effets, 2=aide, 3=boutons tactiles, 4=lissage, 5=vignette, 6=saturation, 7=scanlines
     const yPositions = [
       h / 2 - 198,  // Musique
       h / 2 - 140,  // Effets
       h / 2 - 62,   // Aide
-      h / 2 + 32,   // Lissage
-      h / 2 + 90,   // Vignette
-      h / 2 + 148,  // Saturation
-      h / 2 + 206,  // Scanlines
+      h / 2 - 4,    // Boutons tactiles
+      h / 2 + 90,   // Lissage
+      h / 2 + 148,  // Vignette
+      h / 2 + 206,  // Saturation
+      h / 2 + 264,  // Scanlines
     ];
     this.optArrow.setPosition(w / 2 - 230, yPositions[this.optionsIndex]);
   }
@@ -899,7 +923,7 @@ class MenuScene extends Phaser.Scene {
         this.closeOptionsMenu();
         return;
       }
-      const OPT_COUNT = 7;
+      const OPT_COUNT = 8;
       let navChanged = false;
       if (Phaser.Input.Keyboard.JustDown(this.keyDown)) {
         this.optionsIndex = (this.optionsIndex + 1) % OPT_COUNT; navChanged = true;
@@ -938,16 +962,23 @@ class MenuScene extends Phaser.Scene {
           this.drawHintCheckbox(); saveSettings();
           this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
         }
-      // 3: Lissage — checkbox
+      // 3: Boutons tactiles — checkbox
       } else if (this.optionsIndex === 3) {
+        if (isEnter || isLeft || isRight) {
+          DISPLAY_SETTINGS.touchButtons = !DISPLAY_SETTINGS.touchButtons;
+          this.drawTouchBtnsCheckbox(); saveSettings();
+          this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        }
+      // 4: Lissage — checkbox
+      } else if (this.optionsIndex === 4) {
         if (isEnter || isLeft || isRight) {
           GRAPHICS_SETTINGS.smoothing = !GRAPHICS_SETTINGS.smoothing;
           this.drawGraphicsControls(); saveSettings();
           applyGraphicsSettings(this);
           this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
         }
-      // 4: Vignette — slider 0..1
-      } else if (this.optionsIndex === 4) {
+      // 5: Vignette — slider 0..1
+      } else if (this.optionsIndex === 5) {
         const step = 0.05;
         if (isRight) { GRAPHICS_SETTINGS.vignette = Math.min(1, GRAPHICS_SETTINGS.vignette + step); }
         if (isLeft)  { GRAPHICS_SETTINGS.vignette = Math.max(0, GRAPHICS_SETTINGS.vignette - step); }
@@ -955,8 +986,8 @@ class MenuScene extends Phaser.Scene {
           this.drawGraphicsControls(); saveSettings();
           applyGraphicsSettings(this);
         }
-      // 5: Saturation — slider -1..1
-      } else if (this.optionsIndex === 5) {
+      // 6: Saturation — slider -1..1
+      } else if (this.optionsIndex === 6) {
         const step = 0.1;
         if (isRight) { GRAPHICS_SETTINGS.saturation = Math.min(1, +(GRAPHICS_SETTINGS.saturation + step).toFixed(1)); }
         if (isLeft)  { GRAPHICS_SETTINGS.saturation = Math.max(-1, +(GRAPHICS_SETTINGS.saturation - step).toFixed(1)); }
@@ -964,8 +995,8 @@ class MenuScene extends Phaser.Scene {
           this.drawGraphicsControls(); saveSettings();
           applyGraphicsSettings(this);
         }
-      // 6: Scanlines — checkbox
-      } else if (this.optionsIndex === 6) {
+      // 7: Scanlines — checkbox
+      } else if (this.optionsIndex === 7) {
         if (isEnter || isLeft || isRight) {
           GRAPHICS_SETTINGS.scanlines = !GRAPHICS_SETTINGS.scanlines;
           this.drawGraphicsControls(); saveSettings();

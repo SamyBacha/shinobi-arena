@@ -24,7 +24,7 @@ Enchaîne les adversaires dans un ordre fixe jusqu'au boss final — le **Wander
 
 | Personnage | Capacité spéciale |
 |---|---|
-| **Fighter** | Commence avec 4 vies au lieu de 3 |
+| **Fighter** | Commence avec 5 vies au lieu de 3 |
 | **Samurai** | Chaque attaque inflige +1 dégât bonus — frappe jusqu'à x4 |
 | **Shinobi** | Riposte — réduit les dégâts reçus d'1 lors d'un choc frappe/frappe |
 | **Gotoku** | Esquive — si attaqué pendant une recharge, réduit les dégâts d'1 |

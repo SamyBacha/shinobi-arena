@@ -18,7 +18,7 @@ class CharacterDef {
     projectile    = null,
     sfxStyle      = 'sword',  // 'sword' | 'punch'
     fx            = null,     // { attack1, attack2, attack3, special } — chemins relatifs à fxFolder
-    outfits       = null,     // [{ name: 'Default' }, { name: 'Fire Wizard', folder: '...' }, ...]
+    outfits       = null,     // [{ name: 'Default', enabled: true, sounds: { sfxStyle: 'sword', voices: 'path/', attackSfx: 'path/file.mp3' } }, ...]
   }) {
     this.name          = name;
     this.folder        = folder;
@@ -59,9 +59,10 @@ class CharacterDef {
     return this.assetFolder;
   }
 
-  // Outfits alternatifs (toujours au moins [{ name: 'Default' }])
+  // Outfits alternatifs — filtrés sur enabled !== false (toujours au moins [{ name: 'Default' }])
   get outfits() {
-    return this._outfits || [{ name: 'Default' }];
+    const all = this._outfits || [{ name: 'Default' }];
+    return all.filter(o => o.enabled !== false);
   }
 
   // FX d'attaque déclarés par le personnage

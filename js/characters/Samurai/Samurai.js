@@ -31,6 +31,37 @@ class SamuraiCharacter extends CharacterDef {
         hurt:    { file: 'Hurt.png',     frames: 2 },
         shield:  { file: 'Shield.png',   frames: 2 },
       },
+      outfits: [
+        { name: 'Default' },
+        { name: 'Samurai Commander',  enabled: false,
+          folder: 'js/characters/Samurai/img/outfit_2/Samurai_Commander/',
+          sheets: {
+            idle:    { file: 'Idle.png',     frames: 5 },
+            walk:    { file: 'Walk.png',     frames: 9 },
+            run:     { file: 'Run.png',      frames: 8 },
+            jump:    { file: 'Jump.png',     frames: 7 },
+            attack1: { file: 'Attack_1.png', frames: 4 },
+            attack2: { file: 'Attack_2.png', frames: 5 },
+            attack3: { file: 'Attack_3.png', frames: 4 },
+            dead:    { file: 'Dead.png',     frames: 6 },
+            hurt:    { file: 'Hurt.png',     frames: 2 },
+            shield:  { file: 'Protect.png',  frames: 2 },
+          } },
+        { name: 'Royal Samurai',  enabled: false,
+          folder: 'js/characters/Samurai/img/outfit_3/Royal_Samurai/',
+          sheets: {
+            idle:    { file: 'Idle.png',       frames: 6 },
+            walk:    { file: 'Walk.png',        frames: 9 },
+            run:     { file: 'Run.png',         frames: 8 },
+            jump:    { file: 'Jump.png',        frames: 9 },
+            attack1: { file: 'Attack_1.png',    frames: 4 },
+            attack2: { file: 'Attack_2.png',    frames: 5 },
+            attack3: { file: 'Attack_3.png',    frames: 4 },
+            dead:    { file: 'Dead.png',        frames: 6 },
+            hurt:    { file: 'Hurt.png',        frames: 3 },
+            shield:  { file: 'Protection.png',  frames: 2 },
+          } },
+      ],
     });
   }
 }

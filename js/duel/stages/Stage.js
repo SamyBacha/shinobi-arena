@@ -35,8 +35,10 @@ class Stage {
   }
 
   // Chemin vers le BGM propre au stage (null si utilise le BGM global)
+  // bgm peut être un nom de fichier local ('bgm.mp3') ou un chemin direct ('music/mon_fichier.mp3')
   get bgmPath() {
-    return this._bgm ? this.stageFolder + this._bgm : null;
+    if (!this._bgm) return null;
+    return this._bgm.includes('/') ? this._bgm : this.stageFolder + this._bgm;
   }
 
   get displayName() {

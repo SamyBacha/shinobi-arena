@@ -17,6 +17,7 @@ class YokaiCharacter extends CharacterDef {
         { name: 'Karasu Tengu' },
         { name: 'Kitsune',
           folder: 'js/characters/Yokai/img/Kitsune/',
+          sounds: { voices: 'js/characters/Yokai/sounds/', voiceKey: 'Kitsune' },
           sheets: {
             idle:    { file: 'Idle.png',     frames: 8  },
             idle2:   { file: 'Idle_2.png',   frames: 6  },
@@ -39,6 +40,7 @@ class YokaiCharacter extends CharacterDef {
         },
         { name: 'Yamabushi Tengu',
           folder: 'js/characters/Yokai/img/Yamabushi_tengu/',
+          sounds: { voices: 'js/characters/Yokai/sounds/', voiceKey: 'Yokai' },
           sheets: {
             idle:    { file: 'Idle.png',     frames: 6  },
             idle2:   { file: 'Idle_2.png',   frames: 5  },

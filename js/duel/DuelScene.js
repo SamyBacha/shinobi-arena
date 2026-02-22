@@ -18,6 +18,25 @@ class DuelScene extends Phaser.Scene {
     return charDef.folder;
   }
 
+  // Returns the attack sfx key to use, considering outfit sounds override
+  _charAttackSfxKey(charDef, outfit) {
+    const s = outfit && outfit.sounds;
+    if (s && s.attackSfx) return 'outfit_atk_sfx_' + outfit.folder.replace(/[^a-zA-Z0-9]/g, '_');
+    if (s && s.sfxStyle)  return s.sfxStyle === 'punch' ? 'duel_punch' : 'duel_sword';
+    return charDef.attackSfxKey;
+  }
+
+  // Returns { cachePrefix, folder, voiceKey } for voice loading/playing, considering outfit override
+  // sounds.voices = dossier, sounds.voiceKey = nom de base des fichiers (ex: 'Yokai')
+  _charVoiceInfo(charDef, outfit) {
+    const s = outfit && outfit.sounds;
+    if (s && s.voices) {
+      const vk = s.voiceKey || charDef.voiceKey;
+      return { cachePrefix: 'outfit_voice_' + outfit.folder.replace(/[^a-zA-Z0-9]/g, '_'), folder: s.voices, voiceKey: vk };
+    }
+    return { cachePrefix: 'voice', folder: charDef.voicesFolder, voiceKey: charDef.voiceKey };
+  }
+
   // Returns true if the character (with given outfit) has a projectile ability
   _charHasProjectile(charDef, outfit) {
     if (charDef.projectile) return true;
@@ -50,6 +69,13 @@ class DuelScene extends Phaser.Scene {
     } else {
       this.stageIndex = Phaser.Math.Between(1, Math.max(1, STAGES.length));
     }
+
+    this.tutorialMode   = data.tutorialMode || false;
+    this.tutorialScript = data.tutorialScript || [];
+    this.tutorialTurnIdx = 0;
+
+    this.isMobile      = (navigator.maxTouchPoints > 0) || /Mobi|Android/i.test(navigator.userAgent);
+    this.showTouchBtns = this.isMobile || DISPLAY_SETTINGS.touchButtons;
   }
 
   // Sheets present in outfit folders (standard animations only)
@@ -170,21 +196,50 @@ class DuelScene extends Phaser.Scene {
     if (!this.cache.audio.exists('peasant_special')) {
       this.load.audio('peasant_special', peasant.voicesFolder + 'Peasant_special_ability.mp3');
     }
+    if (!this.textures.exists('peasant_dart')) {
+      this.load.image('peasant_dart', peasant.assetFolder + 'Dart.png');
+    }
     if (!this.cache.audio.exists('magic_spell')) {
       this.load.audio('magic_spell', 'music/sfx_elemental-magic-spell-impact-outgoing.mp3');
     }
 
-    // Character voices — fichiers optionnels dans {voicesFolder}/{folder}_{event}.mp3
-    [this.p1Def, this.p2Def].forEach(charDef => {
+    // Character voices — fichiers optionnels dans {voicesFolder}/{voiceKey}_{event}.mp3
+    [[this.p1Def, this.p1Outfit], [this.p2Def, this.p2Outfit]].forEach(([charDef, outfit]) => {
+      // Base character voices
       ['intro', 'win', 'lose'].forEach(ev => {
         const key = 'voice_' + charDef.voiceKey + '_' + ev;
         if (!this.cache.audio.exists(key)) {
           this.load.audio(key, charDef.voicesFolder + charDef.voiceKey + '_' + ev + '.mp3');
         }
       });
+      // Outfit sound overrides
+      const s = outfit && outfit.sounds;
+      if (s) {
+        // Custom attack sfx
+        if (s.attackSfx) {
+          const key = 'outfit_atk_sfx_' + outfit.folder.replace(/[^a-zA-Z0-9]/g, '_');
+          if (!this.cache.audio.exists(key)) this.load.audio(key, s.attackSfx);
+        }
+        // Custom voices (sounds.voices = dossier, sounds.voiceKey = nom de base optionnel)
+        if (s.voices) {
+          const info = this._charVoiceInfo(charDef, outfit);
+          ['intro', 'win', 'lose'].forEach(ev => {
+            const key = info.cachePrefix + '_' + info.voiceKey + '_' + ev;
+            if (!this.cache.audio.exists(key)) {
+              this.load.audio(key, info.folder + info.voiceKey + '_' + ev + '.mp3');
+            }
+          });
+        }
+      }
     });
 
     // Stage background chargé comme <img> DOM dans create() via stage.bgPath
+
+    // Mobile button icons
+    if (!this.textures.exists('fx_mana'))       this.load.image('fx_mana',       'img/fx/mana.png');
+    if (!this.textures.exists('fx_shield'))     this.load.image('fx_shield',     'img/fx/shield.png');
+    if (!this.textures.exists('fx_sword'))      this.load.image('fx_sword',      'img/fx/swoard.png');
+    if (!this.textures.exists('fx_projection')) this.load.image('fx_projection', 'img/fx/projection.png');
   }
 
   create() {
@@ -249,8 +304,8 @@ class DuelScene extends Phaser.Scene {
     // life_restore trait: start with 1 charge
     const p1StartCharge = this.p1Def.trait === 'life_restore' ? 1 : 0;
     const p2StartCharge = this.p2Def.trait === 'life_restore' ? 1 : 0;
-    this.p1 = { lives: this.p1MaxLives, charges: p1StartCharge, choice: -1, ready: false, def: this.p1Def, chargeStreak: 0 };
-    this.p2 = { lives: this.p2MaxLives, charges: p2StartCharge, choice: -1, ready: false, def: this.p2Def, chargeStreak: 0 };
+    this.p1 = { lives: this.p1MaxLives, charges: p1StartCharge, choice: -1, ready: false, def: this.p1Def };
+    this.p2 = { lives: this.p2MaxLives, charges: p2StartCharge, choice: -1, ready: false, def: this.p2Def };
 
     // Sprites — use outfit load tag for texture key
     const p1Tag = this._charLoadTag(this.p1Def, this.p1Outfit);
@@ -324,6 +379,12 @@ class DuelScene extends Phaser.Scene {
       }).setOrigin(0.5, 0).setDepth(400);
     }
 
+    // HUD backgrounds
+    const hudBg = this.add.graphics().setDepth(399);
+    hudBg.fillStyle(0x000000, 0.45);
+    hudBg.fillRoundedRect(8, 12, 340, 120, 8);
+    hudBg.fillRoundedRect(w - 348, 12, 340, 120, 8);
+
     // Hearts graphics
     this.p1HeartsGfx = this.add.graphics();
     this.p2HeartsGfx = this.add.graphics();
@@ -375,6 +436,7 @@ class DuelScene extends Phaser.Scene {
       fontSize: '24px', fontFamily: 'monospace', color: '#ffffff',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(400);
+    if (this.tutorialMode) this.turnText.setAlpha(0);
 
     // Result text (center, hidden at first)
     this.resultText = this.add.text(w / 2, 360, '', {
@@ -438,9 +500,13 @@ class DuelScene extends Phaser.Scene {
 
     this.turnPhase = 'none';
     this.gameOver = false;
+
+    if (this.showTouchBtns) this._createMobileButtons();
+    if (this.tutorialMode) this._createTutorialOverlay();
   }
 
   showRules() {
+    if (this.tutorialMode) { this.startTurn(); return; }
     this.turnPhase = 'rules';
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
@@ -653,8 +719,10 @@ class DuelScene extends Phaser.Scene {
     if (this[timerKey]) { this[timerKey].remove(false); this[timerKey] = null; }
 
     const hasIdle2 = this.anims.exists(prefix + '_idle2');
+    // Yokai : idle2 existe mais on ne l'enchaîne pas (vibrage lié aux assets)
+    const isYokai = charDef.folder === 'Yokai';
 
-    if (!hasIdle2) {
+    if (!hasIdle2 || isYokai) {
       sprite.play(prefix + '_idle');
       return;
     }
@@ -784,7 +852,7 @@ class DuelScene extends Phaser.Scene {
     const r = size * 0.25;
     const b = 2;
     // Bordure noire (remplie)
-    gfx.fillStyle(0x000000, 0.6);
+    gfx.fillStyle(0x000000, 1);
     gfx.fillCircle(x - r, y - r * 0.5, r + b);
     gfx.fillCircle(x + r, y - r * 0.5, r + b);
     gfx.fillTriangle(
@@ -794,7 +862,7 @@ class DuelScene extends Phaser.Scene {
     );
     gfx.fillRect(x - r - b, y - r * 0.5, r * 2 + b * 2, r + b);
     // Cœur vide (contour coloré)
-    gfx.lineStyle(2, color, 0.5);
+    gfx.lineStyle(2, color, 0.9);
     gfx.strokeCircle(x - r, y - r * 0.5, r);
     gfx.strokeCircle(x + r, y - r * 0.5, r);
     gfx.beginPath();
@@ -867,16 +935,30 @@ class DuelScene extends Phaser.Scene {
     this.p1ShieldText.setAlpha(p1Shield ? 1 : 0);
     this.p2ShieldText.setAlpha(p2Shield ? 1 : 0);
 
-    // life_restore trait: charge streak indicator
-    if (this.p1Def.trait === 'life_restore' && !p1KitsuneDisp && this.p1.chargeStreak > 0) {
-      this.p1StreakText.setText('↑'.repeat(this.p1.chargeStreak) + ' (' + this.p1.chargeStreak + '/4 → +1 vie)');
-      this.p1StreakText.setAlpha(1);
+    // life_restore trait: indicateur soin disponible (mana >= 4)
+    if (this.p1Def.trait === 'life_restore' && !p1KitsuneDisp) {
+      if (this.p1.charges >= 4 && this.p1.lives < this.p1MaxLives) {
+        this.p1StreakText.setText('❤ Soin prêt !');
+        this.p1StreakText.setAlpha(1);
+      } else if (this.p1.lives < this.p1MaxLives) {
+        this.p1StreakText.setText('Mana ' + this.p1.charges + '/4 → +1 vie');
+        this.p1StreakText.setAlpha(1);
+      } else {
+        this.p1StreakText.setAlpha(0);
+      }
     } else {
       this.p1StreakText.setAlpha(0);
     }
-    if (this.p2Def.trait === 'life_restore' && !p2KitsuneDisp && this.p2.chargeStreak > 0) {
-      this.p2StreakText.setText('↑'.repeat(this.p2.chargeStreak) + ' (' + this.p2.chargeStreak + '/4 → +1 vie)');
-      this.p2StreakText.setAlpha(1);
+    if (this.p2Def.trait === 'life_restore' && !p2KitsuneDisp) {
+      if (this.p2.charges >= 4 && this.p2.lives < this.p2MaxLives) {
+        this.p2StreakText.setText('❤ Soin prêt !');
+        this.p2StreakText.setAlpha(1);
+      } else if (this.p2.lives < this.p2MaxLives) {
+        this.p2StreakText.setText('Mana ' + this.p2.charges + '/4 → +1 vie');
+        this.p2StreakText.setAlpha(1);
+      } else {
+        this.p2StreakText.setAlpha(0);
+      }
     } else {
       this.p2StreakText.setAlpha(0);
     }
@@ -898,6 +980,8 @@ class DuelScene extends Phaser.Scene {
       aura.stop();
       this.time.delayedCall(700, () => { aura.destroy(); });
     }
+
+    if (this.showTouchBtns) this._refreshMobileBtnStates();
   }
 
   _doCharacterEntrance() {
@@ -956,8 +1040,9 @@ class DuelScene extends Phaser.Scene {
     });
   }
 
-  _playVoice(charDef, event, delay) {
-    const key = 'voice_' + charDef.voiceKey + '_' + event;
+  _playVoice(charDef, event, delay, outfit) {
+    const info = this._charVoiceInfo(charDef, outfit);
+    const key  = info.cachePrefix + '_' + info.voiceKey + '_' + event;
     if (!this.cache.audio.exists(key)) return;
     const fn = () => {
       if (this.sound && !this.sound.locked) {
@@ -991,6 +1076,9 @@ class DuelScene extends Phaser.Scene {
     this.p2Sprite.x = 960;
     if (this.p1.lives > 0) this._playIdle(1);
     if (this.p2.lives > 0) this._playIdle(2);
+
+    if (this.tutorialMode) this._updateTutorialOverlay();
+    if (this.showTouchBtns) this._updateMobileBtns();
   }
 
   setPlayerChoice(player, action) {
@@ -1022,6 +1110,7 @@ class DuelScene extends Phaser.Scene {
       }
       pData.ready = true;
       choiceText.setText('...').setColor('#cc88ff');
+      if (this.showTouchBtns) this._updateMobileBtns();
       if (this.p1.ready && this.p2.ready) this.lockChoices();
       return;
     }
@@ -1078,6 +1167,7 @@ class DuelScene extends Phaser.Scene {
     pData.choice = action;
     pData.ready = true;
     choiceText.setText('...').setColor('#ffcc00');
+    if (player === 1) this._updateMobileBtns();
 
     // Check if both ready
     if (this.p1.ready && this.p2.ready) {
@@ -1099,6 +1189,7 @@ class DuelScene extends Phaser.Scene {
 
     pData.ready = true;
     choiceText.setText('...').setColor('#ffcc00');
+    if (player === 1) this._updateMobileBtns();
 
     if (this.p1.ready && this.p2.ready) {
       this.lockChoices();
@@ -1400,37 +1491,20 @@ class DuelScene extends Phaser.Scene {
       }
     }
 
-    // life_restore: track consecutive Recharger streaks; 4 in a row = -4 mana, +1 vie
-    // Kitsune outfit: life_restore désactivé
+    // life_restore: si mana >= 4 → consomme 4 mana et restaure 1 vie (Kitsune : désactivé)
     const p1IsKitsune = !!(this.p1Outfit && this.p1Outfit.projectile1);
     const p2IsKitsune = !!(this.p2Outfit && this.p2Outfit.projectile1);
-    if (this.p1Def.trait === 'life_restore' && !p1IsKitsune) {
-      if (a1 === R) {
-        this.p1.chargeStreak = (this.p1.chargeStreak || 0) + 1;
-        if (this.p1.chargeStreak >= 4) {
-          this.p1.charges -= 4;
-          this.p1.lives = Math.min(this.p1.lives + 1, this.p1MaxLives);
-          this.p1.chargeStreak = 0;
-          this._p1LifeRestore = true;
-          msg = (msg ? msg + ' ' : '') + 'J1 récupère 1 vie !';
-        }
-      } else {
-        this.p1.chargeStreak = 0;
-      }
+    if (this.p1Def.trait === 'life_restore' && !p1IsKitsune && this.p1.charges >= 4 && this.p1.lives < this.p1MaxLives) {
+      this.p1.charges -= 4;
+      this.p1.lives = Math.min(this.p1.lives + 1, this.p1MaxLives);
+      this._p1LifeRestore = true;
+      msg = (msg ? msg + ' ' : '') + 'J1 récupère 1 vie !';
     }
-    if (this.p2Def.trait === 'life_restore' && !p2IsKitsune) {
-      if (a2 === R) {
-        this.p2.chargeStreak = (this.p2.chargeStreak || 0) + 1;
-        if (this.p2.chargeStreak >= 4) {
-          this.p2.charges -= 4;
-          this.p2.lives = Math.min(this.p2.lives + 1, this.p2MaxLives);
-          this.p2.chargeStreak = 0;
-          this._p2LifeRestore = true;
-          msg = (msg ? msg + ' ' : '') + 'J2 récupère 1 vie !';
-        }
-      } else {
-        this.p2.chargeStreak = 0;
-      }
+    if (this.p2Def.trait === 'life_restore' && !p2IsKitsune && this.p2.charges >= 4 && this.p2.lives < this.p2MaxLives) {
+      this.p2.charges -= 4;
+      this.p2.lives = Math.min(this.p2.lives + 1, this.p2MaxLives);
+      this._p2LifeRestore = true;
+      msg = (msg ? msg + ' ' : '') + 'J2 récupère 1 vie !';
     }
 
     // Clamp lives and charges to 0
@@ -1444,8 +1518,8 @@ class DuelScene extends Phaser.Scene {
     this.updateChargesDisplay();
 
     // Cri du perdant au moment où son dernier coeur disparaît
-    if (this.p1.lives <= 0) this._playVoice(this.p1Def, 'lose', 0);
-    if (this.p2.lives <= 0) this._playVoice(this.p2Def, 'lose', 0);
+    if (this.p1.lives <= 0) this._playVoice(this.p1Def, 'lose', 0, this.p1Outfit);
+    if (this.p2.lives <= 0) this._playVoice(this.p2Def, 'lose', 0, this.p2Outfit);
 
     this.playResolveAnimations(a1, a2);
   }
@@ -1579,9 +1653,9 @@ class DuelScene extends Phaser.Scene {
         this.playAttackChain(this.p1Sprite, 'duel_p1', lvl1, null, this.p1Def);
       }
       // Voix intro à la première attaque
-      if (!this._p1IntroPlayed) { this._p1IntroPlayed = true; this._playVoice(this.p1Def, 'intro', 0); }
+      if (!this._p1IntroPlayed) { this._p1IntroPlayed = true; this._playVoice(this.p1Def, 'intro', 0, this.p1Outfit); }
       // Attack sound — shifted by rush
-      const p1Sfx = this.p1Def.attackSfxKey;
+      const p1Sfx = this._charAttackSfxKey(this.p1Def, this.p1Outfit);
       for (let i = 0; i < lvl1; i++) {
         this.time.delayedCall(hurtDelay + i * 250, () => { this.sound.play(p1Sfx, { volume: AUDIO_SETTINGS.sfxVolume }); });
       }
@@ -1621,8 +1695,8 @@ class DuelScene extends Phaser.Scene {
         this.playAttackChain(this.p2Sprite, 'duel_p2', lvl2, null, this.p2Def);
       }
       // Voix intro à la première attaque
-      if (!this._p2IntroPlayed) { this._p2IntroPlayed = true; this._playVoice(this.p2Def, 'intro', 0); }
-      const p2Sfx = this.p2Def.attackSfxKey;
+      if (!this._p2IntroPlayed) { this._p2IntroPlayed = true; this._playVoice(this.p2Def, 'intro', 0, this.p2Outfit); }
+      const p2Sfx = this._charAttackSfxKey(this.p2Def, this.p2Outfit);
       for (let i = 0; i < lvl2; i++) {
         this.time.delayedCall(hurtDelay + i * 250, () => { this.sound.play(p2Sfx, { volume: AUDIO_SETTINGS.sfxVolume }); });
       }
@@ -1766,11 +1840,24 @@ class DuelScene extends Phaser.Scene {
 
     // Disguise surprise attack animations
     const disguiseDelay = 600;
+    const _spawnDart = (fromX, toX, spriteY) => {
+      if (!this.textures.exists('peasant_dart')) return;
+      const dartY = spriteY - 40;
+      const dart = this.add.image(fromX + (fromX < toX ? 60 : -60), dartY, 'peasant_dart');
+      dart.setScale(8);
+      dart.setDepth(320);
+      if (fromX > toX) dart.setFlipX(true);
+      this.tweens.add({
+        targets: dart, x: toX + (fromX < toX ? -60 : 60), duration: 300, ease: 'Power2',
+        onComplete: () => { dart.destroy(); }
+      });
+    };
     if (this._p1DisguiseAttack) {
       this.sound.play('peasant_special', { volume: Math.min(1, AUDIO_SETTINGS.sfxVolume * 2) });
       this.time.delayedCall(disguiseDelay, () => {
         this.p1Sprite.play('duel_p1_attack1');
         this.sound.play('duel_sword', { volume: AUDIO_SETTINGS.sfxVolume });
+        _spawnDart(p1StartX, p2StartX, this.p1Sprite.y);
       });
       this.playCharFx(this.p2Def, 'attack1', p2StartX, p2y, 0.45, true, 200, disguiseDelay + 300);
       this.time.delayedCall(disguiseDelay + 300, () => {
@@ -1783,6 +1870,7 @@ class DuelScene extends Phaser.Scene {
       this.time.delayedCall(disguiseDelay, () => {
         this.p2Sprite.play('duel_p2_attack1');
         this.sound.play('duel_sword', { volume: AUDIO_SETTINGS.sfxVolume });
+        _spawnDart(p2StartX, p1StartX, this.p2Sprite.y);
       });
       this.playCharFx(this.p1Def, 'attack1', p1StartX, p1y, 0.45, false, 200, disguiseDelay + 300);
       this.time.delayedCall(disguiseDelay + 300, () => {
@@ -2043,6 +2131,7 @@ class DuelScene extends Phaser.Scene {
       if (this.p1.lives <= 0 || this.p2.lives <= 0) {
         this.showGameOver();
       } else {
+        if (this.tutorialMode) this.tutorialTurnIdx++;
         this.turnNumber++;
         this.startTurn();
       }
@@ -2050,6 +2139,7 @@ class DuelScene extends Phaser.Scene {
   }
 
   showGameOver() {
+    if (this.tutorialMode) { this._showTutorialComplete(); return; }
     this.gameOver = true;
     this.turnPhase = 'gameover';
 
@@ -2067,9 +2157,9 @@ class DuelScene extends Phaser.Scene {
 
     // Cri du vainqueur — le perdant a déjà crié au moment de la perte du dernier coeur
     if (p1Won) {
-      this._playVoice(this.p1Def, 'win', 800);
+      this._playVoice(this.p1Def, 'win', 800, this.p1Outfit);
     } else if (this.p1.lives <= 0) {
-      this._playVoice(this.p2Def, 'win', 800);
+      this._playVoice(this.p2Def, 'win', 800, this.p2Outfit);
     }
 
     // Arcade mode logic
@@ -2637,6 +2727,7 @@ class DuelScene extends Phaser.Scene {
   }
 
   computeAIChoice() {
+    if (this.tutorialMode) return this._tutorialScriptedAction();
     const roll = Math.random();
     const myCharges = this.p2.charges;
     const enemyCharges = this.p1.charges;
@@ -2656,8 +2747,12 @@ class DuelScene extends Phaser.Scene {
     const dmgAt = (charges) => charges + (hasBonusDmg ? 1 : 0);
 
     // Can finish with projectile?
-    if (hasProjectile && myCharges >= projCost && projCost <= enemyLives && roll < 0.55) {
+    if (hasProjectile && myCharges >= projCost && projCost <= enemyLives && roll < 0.75) {
       return DUEL_ACTIONS.PROJECTILE;
+    }
+    // Kitsune x2 finisher
+    if (isKitsuneOutfit && myCharges >= 4 && 2 <= enemyLives && roll < 0.70) {
+      return DUEL_ACTIONS.PROJECTILE; // resolves as x2
     }
 
     // Can finish with super attack?
@@ -2723,20 +2818,44 @@ class DuelScene extends Phaser.Scene {
       }
     }
 
-    // life_restore AI: 4 recharges consécutives → +1 vie (désactivé pour Kitsune)
+    // life_restore AI: accumuler 4 mana → soin automatique (désactivé pour Kitsune)
     if (hasLifeRestore && !isKitsuneOutfit) {
-      const streak = this.p2.chargeStreak || 0;
-      // Si on est lancé dans une série, continuer sauf si danger immédiat
-      if (streak >= 1 && this.p2.lives > 1) {
-        // 3 recharges déjà faites → terminer la série (sauf danger)
-        if (streak >= 3) {
-          if (roll < 0.85) return DUEL_ACTIONS.RECHARGER;
+      const hasLostLife = this.p2.lives < this.p2MaxLives;
+      const canHeal = myCharges >= 4 && hasLostLife; // soin se déclenche automatiquement ce tour
+      const wantsHeal = hasLostLife && myCharges < 4 && enemyCharges < this.p2.lives;
+
+      // Le soin va se déclencher ce tour (mana >= 4) — jouer librement
+      if (canHeal) {
+        // Après soin on aura myCharges-4 mana, jouer normalement
+        const afterCharges = myCharges - 4;
+        if (afterCharges >= enemyLives && roll < 0.65) {
+          if (afterCharges >= 3) return DUEL_ACTIONS.FRAPPER3;
+          if (afterCharges >= 2) return DUEL_ACTIONS.FRAPPER2;
+          return DUEL_ACTIONS.FRAPPER;
         }
-        if (roll < 0.70) return DUEL_ACTIONS.RECHARGER;
-        if (roll < 0.88) return DUEL_ACTIONS.PROTEGER;
+        if (roll < 0.55) return DUEL_ACTIONS.RECHARGER;
+        if (roll < 0.75) return DUEL_ACTIONS.PROTEGER;
         return DUEL_ACTIONS.FRAPPER;
       }
-      // Comportement normal avec biais vers recharge
+
+      // Accumuler du mana pour se soigner si on a perdu des vies
+      if (wantsHeal) {
+        const inDanger = enemyCharges >= this.p2.lives;
+        if (inDanger) {
+          // Danger : frapper ou protéger
+          if (myCharges >= this.p2.lives && roll < 0.65) {
+            if (myCharges >= 3) return DUEL_ACTIONS.FRAPPER3;
+            if (myCharges >= 2) return DUEL_ACTIONS.FRAPPER2;
+            return DUEL_ACTIONS.FRAPPER;
+          }
+          return roll < 0.55 ? DUEL_ACTIONS.PROTEGER : DUEL_ACTIONS.RECHARGER;
+        }
+        // Pas de danger → recharger vers 4 mana
+        const healUrgency = (this.p2MaxLives - this.p2.lives) / this.p2MaxLives;
+        if (roll < 0.55 + healUrgency * 0.30) return DUEL_ACTIONS.RECHARGER;
+      }
+
+      // Comportement normal
       if (myCharges <= 0) return roll < 0.75 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.PROTEGER;
       if (myCharges >= 3 && roll < 0.35) return DUEL_ACTIONS.FRAPPER3;
       if (myCharges >= 2 && roll < 0.25) return DUEL_ACTIONS.FRAPPER2;
@@ -2762,11 +2881,13 @@ class DuelScene extends Phaser.Scene {
       return roll < 0.65 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.PROTEGER;
     } else if (enemyCharges <= 0) {
       // Try super attacks if enough charges
-      if (hasProjectile && myCharges >= projCost && roll < 0.30) return DUEL_ACTIONS.PROJECTILE;
+      if (hasProjectile && myCharges >= projCost && roll < 0.60) return DUEL_ACTIONS.PROJECTILE;
       if (!limitX2 && myCharges >= 3 && roll < 0.25) return DUEL_ACTIONS.FRAPPER3;
       if (!limitX2 && myCharges >= 2 && roll < 0.40) return DUEL_ACTIONS.FRAPPER2;
       if (limitX2 && !isKitsuneOutfit && myCharges >= 2 && roll < 0.40) return DUEL_ACTIONS.FRAPPER2;
-      if (isKitsuneOutfit && myCharges >= 1 && roll < 0.40) return DUEL_ACTIONS.FRAPPER;
+      if (isKitsuneOutfit && myCharges >= 4 && roll < 0.65) return DUEL_ACTIONS.PROJECTILE;
+      if (isKitsuneOutfit && myCharges >= 3 && roll < 0.55) return DUEL_ACTIONS.PROJECTILE;
+      if (isKitsuneOutfit && myCharges >= 1 && roll < 0.35) return DUEL_ACTIONS.FRAPPER;
       // Mimicry: enemy has no charges, likely to recharge — mirror them
       if (hasMimicry) return roll < 0.60 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.FRAPPER;
       // Disguise: protect to surprise attack recharging enemy
@@ -2774,10 +2895,12 @@ class DuelScene extends Phaser.Scene {
       return roll < 0.55 ? DUEL_ACTIONS.RECHARGER : DUEL_ACTIONS.FRAPPER;
     } else {
       // Both have charges
-      if (hasProjectile && myCharges >= projCost && roll < 0.20) return DUEL_ACTIONS.PROJECTILE;
+      if (hasProjectile && myCharges >= projCost && roll < 0.50) return DUEL_ACTIONS.PROJECTILE;
       if (!limitX2 && myCharges >= 3 && roll < 0.15) return DUEL_ACTIONS.FRAPPER3;
       if (!limitX2 && myCharges >= 2 && roll < 0.20) return DUEL_ACTIONS.FRAPPER2;
       if (limitX2 && !isKitsuneOutfit && myCharges >= 2 && roll < 0.25) return DUEL_ACTIONS.FRAPPER2;
+      if (isKitsuneOutfit && myCharges >= 4 && roll < 0.60) return DUEL_ACTIONS.PROJECTILE;
+      if (isKitsuneOutfit && myCharges >= 3 && roll < 0.50) return DUEL_ACTIONS.PROJECTILE;
       if (isKitsuneOutfit && myCharges >= 1 && roll < 0.25) return DUEL_ACTIONS.FRAPPER;
       if (hasDisguise) {
         if (roll < 0.35) return DUEL_ACTIONS.PROTEGER;
@@ -2982,5 +3105,288 @@ class DuelScene extends Phaser.Scene {
         });
       }
     }
+  }
+
+  _createTutorialOverlay() {
+    const w = this.cameras.main.width;
+    this._tutPanel = this.add.graphics();
+    this._tutPanel.fillStyle(0x000000, 0.75);
+    this._tutPanel.fillRoundedRect(w / 2 - 310, 8, 620, 70, 10);
+    this._tutPanel.setDepth(450);
+    this._tutHintText = this.add.text(w / 2, 43, '', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#ffff88',
+      stroke: '#000000', strokeThickness: 3,
+      wordWrap: { width: 580 }, align: 'center',
+    }).setOrigin(0.5).setDepth(451);
+  }
+
+  _updateTutorialOverlay() {
+    const hints = [
+      'Tour 1 — Rechargez pour gagner du mana (touche 1)',
+      'Tour 2 — Rechargez encore pour avoir 2 mana',
+      'Tour 3 — L\'IA va frapper ! Protégez-vous (touche 2)',
+      'Tour 4 — L\'IA se protège. Frappez (touche 3) !',
+      'Tour 5 — Rechargez pour préparer une super attaque',
+      'Tour 6 — L\'IA se protège. Frappez x2 (double-tap 3) !',
+      'Tour 7 — Rechargez encore une fois',
+      'Tour 8 — L\'IA se protège. Frappez x3 pour le KO !',
+    ];
+    const idx = this.tutorialTurnIdx;
+    if (this._tutHintText) {
+      this._tutHintText.setText(idx < hints.length ? hints[idx] : '');
+    }
+  }
+
+  _tutorialScriptedAction() {
+    const actions = [
+      DUEL_ACTIONS.RECHARGER,  // Tour 1
+      DUEL_ACTIONS.RECHARGER,  // Tour 2
+      DUEL_ACTIONS.FRAPPER,    // Tour 3 — frappe le joueur
+      DUEL_ACTIONS.PROTEGER,   // Tour 4 — protège contre l'attaque du joueur
+      DUEL_ACTIONS.RECHARGER,  // Tour 5
+      DUEL_ACTIONS.PROTEGER,   // Tour 6 — protège x2
+      DUEL_ACTIONS.RECHARGER,  // Tour 7
+      DUEL_ACTIONS.PROTEGER,   // Tour 8 — protège x3 → KO
+    ];
+    return this.tutorialTurnIdx < actions.length
+      ? actions[this.tutorialTurnIdx]
+      : DUEL_ACTIONS.RECHARGER;
+  }
+
+  _showTutorialComplete() {
+    this.gameOver = true;
+    this.turnPhase = 'gameover';
+    this.stopDuelMusic();
+    const w = this.cameras.main.width;
+    const p1Won = this.p2.lives <= 0 && this.p1.lives > 0;
+    const msg = p1Won ? 'TUTORIEL TERMINÉ !\nBravo, vous maîtrisez les bases !' : 'Essayez encore !';
+    const color = p1Won ? '#44ff44' : '#ff4444';
+    this.add.text(w / 2, 320, msg, {
+      fontSize: '36px', fontFamily: 'monospace', color,
+      fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(600);
+    this.time.delayedCall(3500, () => {
+      this.scene.start('DuelSelectScene');
+    });
+  }
+
+  // ---- Mobile touch buttons ----
+
+  _makeMobileBtn(x, y, texKey, label, action, player) {
+    const RADIUS   = 44;
+    const IMG_SIZE = 64;
+
+    // Background circle (redrawn on hover/press)
+    const gfx = this.add.graphics().setDepth(410).setScrollFactor(0);
+    this._drawMobileBtnGfx(gfx, x, y, RADIUS, false, false);
+
+    // Compute the scale needed to display the texture at IMG_SIZE px,
+    // regardless of the source image's actual pixel dimensions.
+    const tex    = this.textures.get(texKey);
+    const frame  = tex.getSourceImage();
+    const srcW   = frame.width  || IMG_SIZE;
+    const srcH   = frame.height || IMG_SIZE;
+    const base   = IMG_SIZE / Math.max(srcW, srcH);  // uniform scale, keeps aspect
+
+    const img = this.add.image(x, y, texKey)
+      .setScale(base)
+      .setAlpha(0.92)
+      .setDepth(411)
+      .setScrollFactor(0);
+
+    const txt = this.add.text(x, y + RADIUS - 2, label, {
+      fontSize: '10px', fontFamily: 'monospace', color: '#ccddff',
+    }).setOrigin(0.5).setDepth(412).setScrollFactor(0);
+
+    const zone = this.add.zone(x, y, RADIUS * 2, RADIUS * 2)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(413)
+      .setScrollFactor(0);
+
+    const resetScale = () => { this.tweens.killTweensOf(img); img.setScale(base); };
+
+    // Hover in — bright border
+    zone.on('pointerover', () => {
+      this._drawMobileBtnGfx(gfx, x, y, RADIUS, true, false);
+      img.setAlpha(1);
+      txt.setColor('#ffffff');
+    });
+
+    // Hover out — back to normal
+    zone.on('pointerout', () => {
+      this._drawMobileBtnGfx(gfx, x, y, RADIUS, false, false);
+      resetScale();
+      img.setAlpha(0.92);
+      txt.setColor('#ccddff');
+    });
+
+    // Press down — shrink to 82% of base scale
+    zone.on('pointerdown', () => {
+      this._drawMobileBtnGfx(gfx, x, y, RADIUS, true, true);
+      this.tweens.killTweensOf(img);
+      this.tweens.add({ targets: img, scaleX: base * 0.82, scaleY: base * 0.82, duration: 60, ease: 'Power2' });
+      if (player === 1) this.setPlayerChoice(1, action);
+      else              this.setPlayerChoice(2, action);
+    });
+
+    // Release — animate back to base scale
+    zone.on('pointerup', () => {
+      this._drawMobileBtnGfx(gfx, x, y, RADIUS, false, false);
+      this.tweens.killTweensOf(img);
+      this.tweens.add({ targets: img, scaleX: base, scaleY: base, duration: 120, ease: 'Back.easeOut' });
+      img.setAlpha(0.92);
+      txt.setColor('#ccddff');
+    });
+
+    // Store base scale on the image for _updateMobileBtns to restore
+    img._baseScale = base;
+
+    return { gfx, img, txt, zone };
+  }
+
+  // Apply or remove the greyed-out (disabled) look on a button
+  _applyMobileBtnDim(btn, disabled) {
+    if (disabled) {
+      btn.img.setAlpha(0.25);
+      btn.img.setTint(0x888888);
+      btn.txt.setColor('#555566');
+      btn.zone.disableInteractive();
+    } else {
+      btn.img.setAlpha(0.92);
+      btn.img.clearTint();
+      btn.txt.setColor('#ccddff');
+      btn.zone.setInteractive({ useHandCursor: true });
+    }
+  }
+
+  // Refresh disabled state of attack/projectile buttons based on current charges
+  _refreshMobileBtnStates() {
+    if (!this.showTouchBtns || !this._mobileBtns) return;
+    if (this.turnPhase !== 'input') return;
+
+    const refresh = (btns, swordBtn, projBtn, pData, charDef, outfit) => {
+      if (!btns || !btns.length) return;
+      // Frapper: needs at least 1 charge
+      if (swordBtn) this._applyMobileBtnDim(swordBtn, pData.charges <= 0);
+      // Projectile: cost depends on character
+      if (projBtn) {
+        const isKitsune = !!(outfit && (outfit.projectile1 || outfit.projectile2));
+        const projCost  = isKitsune ? 3 : 4;
+        this._applyMobileBtnDim(projBtn, pData.charges < projCost);
+      }
+    };
+
+    // P1 — sword = index 1, proj = index 2 (or _mobileProjBtn)
+    refresh(this._mobileBtns, this._mobileBtns[1], this._mobileProjBtn,
+            this.p1, this.p1Def, this.p1Outfit);
+
+    // P2
+    if (!this.vsAI && this._mobileP2Btns && this._mobileP2Btns.length) {
+      refresh(this._mobileP2Btns, this._mobileP2Btns[1], this._mobileP2ProjBtn,
+              this.p2, this.p2Def, this.p2Outfit);
+    }
+  }
+
+  _drawMobileBtnGfx(gfx, x, y, r, hover, pressed) {
+    gfx.clear();
+    if (pressed) {
+      gfx.fillStyle(0x223344, 0.75);
+      gfx.fillCircle(x, y, r);
+      gfx.lineStyle(2, 0x88ccff, 1);
+      gfx.strokeCircle(x, y, r);
+      // inner highlight ring
+      gfx.lineStyle(1, 0xffffff, 0.3);
+      gfx.strokeCircle(x, y, r - 6);
+    } else if (hover) {
+      gfx.fillStyle(0x112233, 0.5);
+      gfx.fillCircle(x, y, r);
+      gfx.lineStyle(2, 0x66aadd, 1);
+      gfx.strokeCircle(x, y, r);
+    } else {
+      gfx.fillStyle(0x000000, 0.35);
+      gfx.fillCircle(x, y, r);
+      gfx.lineStyle(2, 0x446688, 0.8);
+      gfx.strokeCircle(x, y, r);
+    }
+  }
+
+  _createMobileButtons() {
+    const w = this.cameras.main.width; // 1280
+
+    this._mobileBtns   = [];
+    this._mobileP2Btns = [];
+
+    // P1 — bottom-left
+    const p1Mana   = this._makeMobileBtn(68,  560, 'fx_mana',       'Recharger',  DUEL_ACTIONS.RECHARGER,  1);
+    const p1Sword  = this._makeMobileBtn(172, 560, 'fx_sword',      'Frapper',    DUEL_ACTIONS.FRAPPER,    1);
+    const p1Proj   = this._makeMobileBtn(276, 560, 'fx_projection', 'Projectile', DUEL_ACTIONS.PROJECTILE, 1);
+    const p1Shield = this._makeMobileBtn(120, 628, 'fx_shield',     'Protéger',   DUEL_ACTIONS.PROTEGER,   1);
+
+    this._mobileBtns.push(p1Mana, p1Sword, p1Proj, p1Shield);
+    this._mobileProjBtn = p1Proj;
+
+    // P2 — bottom-right (mirrored), only if not vsAI
+    if (!this.vsAI) {
+      const p2Mana   = this._makeMobileBtn(w - 68,  560, 'fx_mana',       'Recharger',  DUEL_ACTIONS.RECHARGER,  2);
+      const p2Sword  = this._makeMobileBtn(w - 172, 560, 'fx_sword',      'Frapper',    DUEL_ACTIONS.FRAPPER,    2);
+      const p2Proj   = this._makeMobileBtn(w - 276, 560, 'fx_projection', 'Projectile', DUEL_ACTIONS.PROJECTILE, 2);
+      const p2Shield = this._makeMobileBtn(w - 120, 628, 'fx_shield',     'Protéger',   DUEL_ACTIONS.PROTEGER,   2);
+
+      this._mobileP2Btns.push(p2Mana, p2Sword, p2Proj, p2Shield);
+      this._mobileP2ProjBtn = p2Proj;
+    }
+
+    // Start hidden
+    [...this._mobileBtns, ...this._mobileP2Btns].forEach(b => {
+      b.gfx.setVisible(false);
+      b.img.setVisible(false);
+      b.txt.setVisible(false);
+      b.zone.setVisible(false);
+    });
+  }
+
+  _updateMobileBtns() {
+    if (!this.showTouchBtns || !this._mobileBtns) return;
+
+    // P1 buttons
+    const p1Visible = (this.turnPhase === 'input') && !this.p1.ready;
+    this._mobileBtns.forEach(b => {
+      if (p1Visible) { this.tweens.killTweensOf(b.img); b.img.setScale(b.img._baseScale); }
+      b.gfx.setVisible(p1Visible);
+      b.img.setVisible(p1Visible);
+      b.txt.setVisible(p1Visible);
+      b.zone.setVisible(p1Visible);
+    });
+    if (this._mobileProjBtn) {
+      const hasProj = this._charHasProjectile(this.p1Def, this.p1Outfit);
+      const v = p1Visible && hasProj;
+      this._mobileProjBtn.gfx.setVisible(v);
+      this._mobileProjBtn.img.setVisible(v);
+      this._mobileProjBtn.txt.setVisible(v);
+      this._mobileProjBtn.zone.setVisible(v);
+    }
+
+    // P2 buttons (only in 2-player mode)
+    if (!this.vsAI && this._mobileP2Btns && this._mobileP2Btns.length) {
+      const p2Visible = (this.turnPhase === 'input') && !this.p2.ready;
+      this._mobileP2Btns.forEach(b => {
+        if (p2Visible) { this.tweens.killTweensOf(b.img); b.img.setScale(b.img._baseScale); }
+        b.gfx.setVisible(p2Visible);
+        b.img.setVisible(p2Visible);
+        b.txt.setVisible(p2Visible);
+        b.zone.setVisible(p2Visible);
+      });
+      if (this._mobileP2ProjBtn) {
+        const hasProj2 = this._charHasProjectile(this.p2Def, this.p2Outfit);
+        const v2 = p2Visible && hasProj2;
+        this._mobileP2ProjBtn.gfx.setVisible(v2);
+        this._mobileP2ProjBtn.img.setVisible(v2);
+        this._mobileP2ProjBtn.txt.setVisible(v2);
+        this._mobileP2ProjBtn.zone.setVisible(v2);
+      }
+    }
+
+    this._refreshMobileBtnStates();
   }
 }

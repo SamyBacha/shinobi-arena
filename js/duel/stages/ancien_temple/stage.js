@@ -1,5 +1,5 @@
 STAGES.push(new Stage({
   id:          'ancien_temple',
   displayName: 'Ancien Temple',
-  bgm:         'bgm.mp3',
+  bgm:         'js/duel/stages/shared_music/aride_bgm/bgm.mp3',
 }));

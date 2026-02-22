@@ -18,7 +18,7 @@ const config = {
         // debug: false
       }
     },
-    scene: [MenuScene, SelectScene, DuelSelectScene, GameScene, DuelScene],
+    scene: [MenuScene, SelectScene, DuelSelectScene, GameScene, DuelScene, TutorialScene],
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH

@@ -61,7 +61,7 @@ const DUEL_NEXT_TURN_DELAY = 1800;
 const AUDIO_SETTINGS = { musicVolume: 0.5, sfxVolume: 1.0 };
 
 // Display settings
-const DISPLAY_SETTINGS = { showHints: true };
+const DISPLAY_SETTINGS = { showHints: true, touchButtons: false };
 
 // Graphics settings
 const GRAPHICS_SETTINGS = {
@@ -78,7 +78,7 @@ const CHEAT_SETTINGS = { ghostsUnlocked: false, magikUnlocked: false, villageUnl
 const TRAIT_LABELS = {
   extra_life: {
     short: 'Endurance',
-    desc: 'Commence avec 4 vies au lieu de 3.',
+    desc: 'Commence avec 5 vies au lieu de 3.',
   },
   attack_x4: {
     short: 'Lame Aiguisée',
@@ -114,7 +114,7 @@ const TRAIT_LABELS = {
   },
   life_restore: {
     short: 'Âme Vengeresse',
-    desc: 'Commence avec 1 mana. Recharger 4 fois de suite (dépense 4 mana) restaure 1 vie. Kitsune : capacité inactive.',
+    desc: 'Commence avec 1 mana. À 4 mana : consomme 4 mana et restaure 1 vie automatiquement. Kitsune : capacité inactive.',
   },
 };
 
@@ -125,6 +125,7 @@ function saveSettings() {
       musicVolume:  AUDIO_SETTINGS.musicVolume,
       sfxVolume:    AUDIO_SETTINGS.sfxVolume,
       showHints:    DISPLAY_SETTINGS.showHints,
+      touchButtons: DISPLAY_SETTINGS.touchButtons,
       smoothing:    GRAPHICS_SETTINGS.smoothing,
       vignette:     GRAPHICS_SETTINGS.vignette,
       saturation:   GRAPHICS_SETTINGS.saturation,
@@ -140,6 +141,7 @@ function loadSettings() {
       if (s.musicVolume  !== undefined) AUDIO_SETTINGS.musicVolume      = s.musicVolume;
       if (s.sfxVolume    !== undefined) AUDIO_SETTINGS.sfxVolume        = s.sfxVolume;
       if (s.showHints    !== undefined) DISPLAY_SETTINGS.showHints      = s.showHints;
+      if (s.touchButtons !== undefined) DISPLAY_SETTINGS.touchButtons   = s.touchButtons;
       if (s.smoothing    !== undefined) GRAPHICS_SETTINGS.smoothing     = s.smoothing;
       if (s.vignette     !== undefined) GRAPHICS_SETTINGS.vignette      = s.vignette;
       if (s.saturation   !== undefined) GRAPHICS_SETTINGS.saturation    = s.saturation;

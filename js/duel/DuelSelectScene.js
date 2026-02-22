@@ -14,22 +14,45 @@ class DuelSelectScene extends Phaser.Scene {
   preload() {
     const allChars = [...Object.values(CHARACTERS), ...Object.values(GHOST_CHARACTERS), ...Object.values(HIDDEN_CHARACTERS)];
     allChars.forEach(char => {
-      const key = 'select_' + char.folder + '_idle';
-      if (!this.textures.exists(key)) {
-        this.load.spritesheet(key, char.assetFolder + 'Idle.png', {
-          frameWidth: char.frameSize, frameHeight: char.frameSize
-        });
+      const base = char.assetFolder;
+      const fs   = char.frameSize;
+      const load = (key, file, fw, fh) => {
+        if (!this.textures.exists(key)) this.load.spritesheet(key, file, { frameWidth: fw, frameHeight: fh });
+      };
+      load('select_' + char.folder + '_idle',    base + char.sheets.idle.file,    fs, fs);
+      load('select_' + char.folder + '_attack1', base + char.sheets.attack1.file, fs, fs);
+      if (char.sheets.attack2) load('select_' + char.folder + '_attack2', base + char.sheets.attack2.file, fs, fs);
+      if (char.sheets.attack3) load('select_' + char.folder + '_attack3', base + char.sheets.attack3.file, fs, fs);
+      if (char.projectile) {
+        const pfs = char.projectile.frameSize || fs;
+        load('select_' + char.folder + '_proj', base + char.sheets[char.projectile.sheet].file, pfs, pfs);
       }
-      // Preload outfit idle sprites for characters with alternate outfits
+      // Preload outfit sprites for characters with alternate outfits
       if (char._outfits) {
-        char._outfits.forEach(outfit => {
+        char._outfits.filter(o => o.enabled !== false).forEach(outfit => {
           if (!outfit.folder) return;
           const folderKey = outfit.folder.replace(/[^a-zA-Z0-9_]/g, '_');
-          const outfitKey = 'select_outfit_' + folderKey + '_idle';
-          if (!this.textures.exists(outfitKey)) {
-            this.load.spritesheet(outfitKey, outfit.folder + 'Idle.png', {
-              frameWidth: char.frameSize, frameHeight: char.frameSize
-            });
+          const oSheets = outfit.sheets || {};
+          const oBase   = outfit.folder;
+          const idleFile = oSheets.idle    ? oBase + oSheets.idle.file    : base + char.sheets.idle.file;
+          const atk1File = oSheets.attack1 ? oBase + oSheets.attack1.file : base + char.sheets.attack1.file;
+          load('select_outfit_' + folderKey + '_idle',    idleFile, fs, fs);
+          load('select_outfit_' + folderKey + '_attack1', atk1File, fs, fs);
+          if (oSheets.attack2 || char.sheets.attack2) {
+            const atk2File = oSheets.attack2 ? oBase + oSheets.attack2.file : base + char.sheets.attack2.file;
+            load('select_outfit_' + folderKey + '_attack2', atk2File, fs, fs);
+          }
+          if (oSheets.attack3 || char.sheets.attack3) {
+            const atk3File = oSheets.attack3 ? oBase + oSheets.attack3.file : base + char.sheets.attack3.file;
+            load('select_outfit_' + folderKey + '_attack3', atk3File, fs, fs);
+          }
+          // Outfit projectile (ex: Kitsune fire1)
+          if (outfit.projectile1) {
+            const pSheet = oSheets[outfit.projectile1.sheet];
+            if (pSheet) {
+              const pfs2 = outfit.projectile1.frameSize || fs;
+              load('select_outfit_' + folderKey + '_proj', oBase + pSheet.file, pfs2, pfs2);
+            }
           }
         });
       }
@@ -121,7 +144,7 @@ class DuelSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.dynamicObjects.push(title);
 
-    this.modeOptions = ['AVENTURE', 'JOUEUR vs IA', 'JOUEUR vs JOUEUR'];
+    this.modeOptions = ['AVENTURE', 'JOUEUR vs IA', 'JOUEUR vs JOUEUR', 'TUTORIEL'];
     this.modeTexts = [];
     this.modeOptions.forEach((label, i) => {
       const txt = this.add.text(w / 2, h * 0.45 + i * 70, label, {
@@ -197,20 +220,26 @@ class DuelSelectScene extends Phaser.Scene {
     this.charPreviews = [];
 
     this._carouselChars.forEach((char) => {
-      const animKey = 'select_anim_' + char.folder;
-      if (!this.anims.exists(animKey)) {
-        this.anims.create({
-          key: animKey,
-          frames: this.anims.generateFrameNumbers('select_' + char.folder + '_idle', {
-            start: 0, end: char.sheets.idle.frames - 1,
-          }),
-          frameRate: 8, repeat: -1,
-        });
+      const tag = char.folder;
+      const makeAnim = (name, texKey, frames, rate, rep) => {
+        const k = 'select_anim_' + tag + '_' + name;
+        if (!this.anims.exists(k) && this.textures.exists(texKey)) {
+          this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(texKey, { start: 0, end: frames - 1 }), frameRate: rate, repeat: rep });
+        }
+        return k;
+      };
+      makeAnim('idle',    'select_' + tag + '_idle',    char.sheets.idle.frames,    8,  -1);
+      makeAnim('attack1', 'select_' + tag + '_attack1', char.sheets.attack1.frames, 12, 0);
+      if (char.sheets.attack2) makeAnim('attack2', 'select_' + tag + '_attack2', char.sheets.attack2.frames, 10, 0);
+      if (char.sheets.attack3) makeAnim('attack3', 'select_' + tag + '_attack3', char.sheets.attack3.frames, 10, 0);
+      if (char.projectile && this.textures.exists('select_' + tag + '_proj')) {
+        makeAnim('proj', 'select_' + tag + '_proj', char.projectile.frames, 12, 0);
       }
+
       const baseScale = (FRAME_SIZE / char.frameSize) * char.duelScale;
-      const sprite = this.add.sprite(cx, cy, 'select_' + char.folder + '_idle', 0);
+      const sprite = this.add.sprite(cx, cy, 'select_' + tag + '_idle', 0);
       sprite.setOrigin(0.5, 0.75);
-      sprite.play(animKey);
+      sprite.play('select_anim_' + tag + '_idle');
       this.dynamicObjects.push(sprite);
       this.charPreviews.push({ sprite, char, baseScale });
     });
@@ -408,6 +437,10 @@ class DuelSelectScene extends Phaser.Scene {
         duration: 180, ease: 'Power2',
       });
       p.sprite.setDepth(slotDepth[slotIdx]);
+
+      if (dist === 0) {
+        this._startSelectPreviewCycle(p);
+      }
     });
 
     // Frame around center outfit
@@ -429,6 +462,91 @@ class DuelSelectScene extends Phaser.Scene {
     if (this._outfitName) {
       this._outfitName.setText(outfit.name.toUpperCase()).setColor(outfitDisplayColor);
     }
+  }
+
+  _startSelectPreviewCycle(p) {
+    // Annuler le cycle précédent
+    if (this._previewTimer) { this._previewTimer.remove(false); this._previewTimer = null; }
+    this._previewCycleActive = false;
+    // Retirer tout listener animationcomplete du sprite précédent
+    if (this._previewSprite && this._previewNextAttackFn) {
+      this._previewSprite.off('animationcomplete', this._previewNextAttackFn);
+      this._previewNextAttackFn = null;
+    }
+    this._previewCycleActive = true;
+    this._previewSprite = p.sprite;
+
+    const sprite  = p.sprite;
+    // Détermine le tag de texture selon que c'est un outfit ou un perso de base
+    const charDef = p.char || (this._outfitPlayer === 'p1' ? this.p1Char : this.p2Char);
+    const outfit  = p.outfit || null;
+    let texTag, animTag;
+    if (outfit && outfit.folder) {
+      const folderKey = outfit.folder.replace(/[^a-zA-Z0-9_]/g, '_');
+      texTag  = 'select_outfit_' + folderKey;
+      animTag = 'select_outfit_anim_' + folderKey;
+    } else {
+      texTag  = 'select_' + charDef.folder;
+      animTag = 'select_anim_' + charDef.folder;
+    }
+    const sheets = (outfit && outfit.sheets) || charDef.sheets;
+
+    // Créer les anims à la volée si pas encore faites (cas outfit)
+    const ensureAnim = (name, frames, rate, rep) => {
+      const k   = animTag + '_' + name;
+      const tex = texTag  + '_' + name;
+      if (!this.anims.exists(k) && this.textures.exists(tex)) {
+        this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(tex, { start: 0, end: frames - 1 }), frameRate: rate, repeat: rep });
+      }
+      return this.anims.exists(k) ? k : null;
+    };
+
+    const idleFrames = sheets.idle ? sheets.idle.frames : charDef.sheets.idle.frames;
+    const idleKey = ensureAnim('idle', idleFrames, 8, -1)
+                 || 'select_anim_' + charDef.folder + '_idle';
+
+    // Séquence d'attaques
+    const attacks = [];
+    const tryAtk = (name, defSheets) => {
+      const fr = (sheets[name] || defSheets[name]);
+      if (!fr) return;
+      const k = ensureAnim(name, fr.frames, name === 'attack1' ? 12 : 10, 0);
+      if (k) attacks.push(k);
+    };
+    tryAtk('attack1', charDef.sheets);
+    tryAtk('attack2', charDef.sheets);
+    tryAtk('attack3', charDef.sheets);
+    // Projectile outfit (Kitsune fire1) ou charDef.projectile
+    if (outfit && outfit.projectile1) {
+      const k = ensureAnim('proj', outfit.projectile1.frames, 12, 0);
+      if (k) attacks.push(k);
+    } else if (charDef.projectile) {
+      const k = 'select_anim_' + charDef.folder + '_proj';
+      if (this.anims.exists(k)) attacks.push(k);
+    }
+
+    const runCycle = () => {
+      if (!this._previewCycleActive) return;
+      sprite.play(idleKey);
+      this._previewTimer = this.time.delayedCall(2000, () => {
+        if (!this._previewCycleActive) return;
+        let idx = 0;
+        const nextAttack = () => {
+          this._previewNextAttackFn = null;
+          if (!this._previewCycleActive) return;
+          if (!sprite || !sprite.active) return;
+          if (idx >= attacks.length) { runCycle(); return; }
+          const animKey = attacks[idx++];
+          if (!this.anims.exists(animKey)) { nextAttack(); return; }
+          sprite.play(animKey);
+          this._previewNextAttackFn = nextAttack;
+          sprite.once('animationcomplete', nextAttack);
+        };
+        nextAttack();
+      });
+    };
+
+    runCycle();
   }
 
   _carouselNav(dir) {
@@ -467,6 +585,13 @@ class DuelSelectScene extends Phaser.Scene {
         duration: 180, ease: 'Power2',
       });
       p.sprite.setDepth(slotDepth[slotIdx]);
+
+      if (dist === 0) {
+        this._startSelectPreviewCycle(p);
+      } else {
+        // Hors centre : revenir à idle simple
+        p.sprite.play('select_anim_' + p.char.folder + '_idle');
+      }
     });
 
     // Shadow
@@ -738,6 +863,13 @@ class DuelSelectScene extends Phaser.Scene {
 
       if (Phaser.Input.Keyboard.JustDown(this.keyEnter)) {
         this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        if (this.selectedIndex === 3) {
+          // TUTORIEL
+          this.stopSelectMusic();
+          this.cameras.main.flash(200, 255, 255, 255);
+          this.time.delayedCall(250, () => { this.scene.start('TutorialScene'); });
+          return;
+        }
         // 0 = AVENTURE (arcade), 1 = JOUEUR vs IA (J1 choisit les deux persos), 2 = PvP
         this.arcade  = this.selectedIndex === 0;
         this.vsAI    = this.selectedIndex <= 1;
@@ -836,6 +968,8 @@ class DuelSelectScene extends Phaser.Scene {
 
   launchDuel() {
     this.confirmed = true;
+    this._previewCycleActive = false;
+    if (this._previewTimer) { this._previewTimer.remove(false); this._previewTimer = null; }
     this.stopSelectMusic();
     this.sound.play('duel_announce', { volume: AUDIO_SETTINGS.sfxVolume });
     this.cameras.main.flash(300, 255, 255, 255);
