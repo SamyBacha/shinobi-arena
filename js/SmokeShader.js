@@ -110,12 +110,23 @@ class SmokeShader {
     this._buildProgram();
     this._resize();
     window.addEventListener('resize', this._resizeHandler);
+    // Orientation change on mobile: re-sync after layout settles
+    this._orientHandler = () => setTimeout(() => this._resize(), 150);
+    window.addEventListener('orientationchange', this._orientHandler);
+    // ResizeObserver on Phaser canvas for reliable sync
+    const phaserCanvas = document.querySelector('#game canvas');
+    if (phaserCanvas) {
+      this._resizeObserver = new ResizeObserver(() => this._resize());
+      this._resizeObserver.observe(phaserCanvas);
+    }
     this._rafId = requestAnimationFrame(this._render);
   }
 
   stop() {
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     window.removeEventListener('resize', this._resizeHandler);
+    if (this._orientHandler) { window.removeEventListener('orientationchange', this._orientHandler); this._orientHandler = null; }
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._canvas) { this._canvas.remove(); this._canvas = null; }
     this._gl = null;
     this._program = null;

@@ -105,6 +105,17 @@ class TutorialScene extends Phaser.Scene {
     this._keyEnter = this.input.keyboard.addKey(K.ENTER);
     this._keyEsc   = this.input.keyboard.addKey(K.ESC);
     this._skipFrame = true;
+
+    // Android back button
+    window.history.pushState({ scene: 'TutorialScene' }, '');
+    this._backHandler = () => {
+      window.history.pushState({ scene: 'TutorialScene' }, '');
+      this.scene.start('DuelSelectScene');
+    };
+    window.addEventListener('popstate', this._backHandler);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('popstate', this._backHandler);
+    });
   }
 
   update() {

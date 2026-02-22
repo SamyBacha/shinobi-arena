@@ -20,6 +20,17 @@ class SelectScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0e0e1a');
     this.confirmed = false;
 
+    // Android back button → go back to menu
+    window.history.pushState({ scene: 'SelectScene' }, '');
+    this._backHandler = () => {
+      window.history.pushState({ scene: 'SelectScene' }, '');
+      if (!this.confirmed) { if (this.detailVisible) { this.hideDetail(); } else { this.scene.start('MenuScene'); } }
+    };
+    window.addEventListener('popstate', this._backHandler);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('popstate', this._backHandler);
+    });
+
     this.chars = [
       ...Object.values(CHARACTERS),
       ...(CHEAT_SETTINGS.villageUnlocked ? [HIDDEN_CHARACTERS.Kunoichi, HIDDEN_CHARACTERS.Ninja_Peasant] : []),

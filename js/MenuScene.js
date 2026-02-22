@@ -30,13 +30,21 @@ class MenuScene extends Phaser.Scene {
   create() {
     applyGraphicsSettings(this);
     smokeShader.start();
+
+    // Android back button — push a history entry so popstate fires on hardware back
+    window.history.pushState({ scene: 'MenuScene' }, '');
+    this._backHandler = () => { this._handleBack(); };
+    window.addEventListener('popstate', this._backHandler);
+
     this.events.once('shutdown', () => {
       smokeShader.stop();
+      window.removeEventListener('popstate', this._backHandler);
       if (this.cheatKeyHandler) {
         window.removeEventListener('keydown', this.cheatKeyHandler, true);
         this.cheatKeyHandler = null;
       }
       if (this._deactivateTimer) { this._deactivateTimer.remove(false); this._deactivateTimer = null; }
+      if (this._cheatDomInput) { this._cheatDomInput.remove(); this._cheatDomInput = null; }
     });
 
     const w = this.cameras.main.width;
@@ -182,6 +190,33 @@ class MenuScene extends Phaser.Scene {
       targets: this.cheatCursor, alpha: 0, duration: 400, yoyo: true, repeat: -1,
     });
 
+    // Hidden DOM input — focuses on mobile to trigger the on-screen keyboard
+    if (!this._cheatDomInput) {
+      this._cheatDomInput = document.createElement('input');
+      this._cheatDomInput.type = 'text';
+      this._cheatDomInput.autocomplete = 'off';
+      this._cheatDomInput.autocorrect = 'off';
+      this._cheatDomInput.autocapitalize = 'off';
+      this._cheatDomInput.spellcheck = false;
+      Object.assign(this._cheatDomInput.style, {
+        position: 'fixed', opacity: '0', pointerEvents: 'none',
+        width: '1px', height: '1px', top: '50%', left: '50%',
+        fontSize: '16px', // 16px prevents iOS zoom
+      });
+      document.body.appendChild(this._cheatDomInput);
+    }
+    this._cheatDomInput.value = '';
+    this._cheatDomInput.focus();
+
+    // Listen to the DOM input's events to handle mobile keyboard input
+    this._cheatDomInputHandler = () => {
+      if (!this.cheatActive) return;
+      const val = this._cheatDomInput.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 16);
+      this.cheatBuffer = val;
+      this.updateCheatDisplay();
+    };
+    this._cheatDomInput.addEventListener('input', this._cheatDomInputHandler);
+
     // Keyboard listener for typing — use native DOM event to intercept before Phaser
     this.cheatKeyHandler = (event) => {
       if (!this.cheatActive) return;
@@ -193,8 +228,10 @@ class MenuScene extends Phaser.Scene {
       if (k === 'Enter') { this.submitCheatCode(); return; }
       if (k === 'Backspace') {
         this.cheatBuffer = this.cheatBuffer.slice(0, -1);
+        if (this._cheatDomInput) this._cheatDomInput.value = this.cheatBuffer;
       } else if (k.length === 1 && this.cheatBuffer.length < 16) {
         this.cheatBuffer += k.toLowerCase();
+        if (this._cheatDomInput) this._cheatDomInput.value = this.cheatBuffer;
       }
       this.updateCheatDisplay();
     };
@@ -229,6 +266,13 @@ class MenuScene extends Phaser.Scene {
     if (this.cheatKeyHandler) {
       window.removeEventListener('keydown', this.cheatKeyHandler, true);
       this.cheatKeyHandler = null;
+    }
+    if (this._cheatDomInput) {
+      if (this._cheatDomInputHandler) {
+        this._cheatDomInput.removeEventListener('input', this._cheatDomInputHandler);
+        this._cheatDomInputHandler = null;
+      }
+      this._cheatDomInput.blur();
     }
     if (this.cheatClickOutsideHandler) {
       this.input.off('pointerdown', this.cheatClickOutsideHandler);
@@ -448,6 +492,15 @@ class MenuScene extends Phaser.Scene {
     this.drawTouchBtnsCheckbox();
     this.drawGraphicsControls();
     this.updateOptionsArrow();
+
+    // Click outside the panel to close
+    const panelX = w / 2 - 270, panelY = h / 2 - 300, panelW = 540, panelH = 658;
+    this._optClickOutside = (ptr) => {
+      if (ptr.x < panelX || ptr.x > panelX + panelW || ptr.y < panelY || ptr.y > panelY + panelH) {
+        this.closeOptionsMenu();
+      }
+    };
+    this.input.on('pointerdown', this._optClickOutside);
 
     // Mouse zones for each option row
     // 0=Musique, 1=Effets, 2=Aide, 3=Boutons tactiles, 4=Lissage, 5=Vignette, 6=Saturation, 7=Scanlines
@@ -692,6 +745,15 @@ class MenuScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(502);
     this.personnagesObjects.push(hintTxt);
+
+    // Click outside the panel to close
+    this._persoClickOutside = (ptr) => {
+      if (ptr.x < panelX || ptr.x > panelX + panelW || ptr.y < panelY || ptr.y > panelY + panelH) {
+        this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        this.closePersonnagesMenu();
+      }
+    };
+    this.input.on('pointerdown', this._persoClickOutside);
 
     // Init first selection
     this.selectPersoIndex(0);
@@ -964,6 +1026,7 @@ class MenuScene extends Phaser.Scene {
     this.optionsObjects.forEach(o => { if (o && o.destroy) o.destroy(); });
     this.optionsObjects = [];
     if (this.menuBgm) this.menuBgm.setVolume(AUDIO_SETTINGS.musicVolume);
+    if (this._optClickOutside) { this.input.off('pointerdown', this._optClickOutside); this._optClickOutside = null; }
   }
 
   closePersonnagesMenu() {
@@ -973,6 +1036,17 @@ class MenuScene extends Phaser.Scene {
     this.personnagesObjects = [];
     this.persoListItems = [];
     this.persoChars = [];
+    if (this._persoClickOutside) { this.input.off('pointerdown', this._persoClickOutside); this._persoClickOutside = null; }
+  }
+
+  _handleBack() {
+    // Re-push so the next back press also triggers
+    window.history.pushState({ scene: 'MenuScene' }, '');
+    if (this.confirmed) return;
+    if (this.cheatActive) { this.deactivateCheatInput(); return; }
+    if (this.showingPersonnages) { this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume }); this.closePersonnagesMenu(); return; }
+    if (this.showingOptions)    { this.closeOptionsMenu(); return; }
+    // At root menu — nothing to close
   }
 
   update() {

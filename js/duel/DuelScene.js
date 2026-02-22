@@ -249,6 +249,15 @@ class DuelScene extends Phaser.Scene {
     applyGraphicsSettings(this);
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
+
+    // Android back button
+    window.history.pushState({ scene: 'DuelScene' }, '');
+    this._backHandler = () => { this._handleBack(); };
+    window.addEventListener('popstate', this._backHandler);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('popstate', this._backHandler);
+    });
+
     // Détection boss final : Magician (trait magic_shield) en vsAI OU stage boss sélectionné
     const currentStage = STAGES[this.stageIndex - 1];
     this.isBossFight = (this.p2Def.trait === 'magic_shield' && this.vsAI) ||
@@ -272,22 +281,31 @@ class DuelScene extends Phaser.Scene {
     {
       const stage = currentStage || STAGES[0];
       const gameCanvas = this.sys.game.canvas;
-      const rect = gameCanvas.getBoundingClientRect();
 
       this._gifImg = document.createElement('img');
       this._gifImg.src = stage.bgPath;
-      this._gifImg.style.cssText = [
-        'position:fixed',
-        'pointer-events:none',
-        'left:'   + rect.left   + 'px',
-        'top:'    + rect.top    + 'px',
-        'width:'  + rect.width  + 'px',
-        'height:' + rect.height + 'px',
-        'object-fit:cover',
-        'z-index:0',
-      ].join(';');
-      // Insérer avant le canvas Phaser pour être naturellement derrière
+      this._gifImg.style.cssText = 'position:fixed;pointer-events:none;object-fit:cover;z-index:0;';
       gameCanvas.parentNode.insertBefore(this._gifImg, gameCanvas);
+
+      // Sync background size/position to match the Phaser canvas exactly
+      this._syncBgToCanvas = () => {
+        if (!this._gifImg) return;
+        const rect = gameCanvas.getBoundingClientRect();
+        this._gifImg.style.left   = rect.left   + 'px';
+        this._gifImg.style.top    = rect.top    + 'px';
+        this._gifImg.style.width  = rect.width  + 'px';
+        this._gifImg.style.height = rect.height + 'px';
+      };
+      this._syncBgToCanvas();
+
+      // Re-sync whenever the canvas is resized (orientation change, window resize)
+      this._bgResizeObserver = new ResizeObserver(() => this._syncBgToCanvas());
+      this._bgResizeObserver.observe(gameCanvas);
+      // Fallback: resize event and orientation change (layout settles after ~150ms)
+      this._bgResizeHandler = () => this._syncBgToCanvas();
+      this._bgOrientHandler = () => setTimeout(() => this._syncBgToCanvas(), 150);
+      window.addEventListener('resize', this._bgResizeHandler);
+      window.addEventListener('orientationchange', this._bgOrientHandler);
 
       // Canvas Phaser transparent (transparent:true dans config app.js)
       // La caméra est déjà à rgba(0,0,0,0) — le GIF DOM est visible derrière
@@ -296,6 +314,9 @@ class DuelScene extends Phaser.Scene {
 
       // Nettoyage quand la scène se termine
       this.events.once('shutdown', () => {
+        if (this._bgResizeObserver) { this._bgResizeObserver.disconnect(); this._bgResizeObserver = null; }
+        if (this._bgResizeHandler)  { window.removeEventListener('resize', this._bgResizeHandler); this._bgResizeHandler = null; }
+        if (this._bgOrientHandler)  { window.removeEventListener('orientationchange', this._bgOrientHandler); this._bgOrientHandler = null; }
         if (this._gifImg) { this._gifImg.remove(); this._gifImg = null; }
         gameCanvas.style.zIndex = '';
       });
@@ -2995,6 +3016,21 @@ class DuelScene extends Phaser.Scene {
     // Prochain éclair dans 1.5–3.5s
     const delay = Phaser.Math.Between(1500, 3500);
     this.time.delayedCall(delay, () => this._spawnBossLightning());
+  }
+
+  _handleBack() {
+    window.history.pushState({ scene: 'DuelScene' }, '');
+    if (this._defeatMenuActive) return; // defeat menu: back does nothing (use menu options)
+    if (this.paused) {
+      if (this.pausePhase === 'volume') { this.hidePauseVolume(); return; }
+      if (this.pausePhase === 'help')   { this.hidePauseHelp();   return; }
+      if (this.pausePhase === 'chars')  { this.hidePauseChars();  return; }
+      this.closePauseMenu(); return;
+    }
+    // Game is running — open pause
+    if (this.turnPhase === 'input' || this.turnPhase === 'rules') {
+      this.showPauseMenu();
+    }
   }
 
   update() {

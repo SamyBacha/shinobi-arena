@@ -83,6 +83,14 @@ class DuelSelectScene extends Phaser.Scene {
     const h = this.cameras.main.height;
     this.cameras.main.setBackgroundColor('#0e0e1a');
 
+    // Android back button
+    window.history.pushState({ scene: 'DuelSelectScene' }, '');
+    this._backHandler = () => { this._handleBack(); };
+    window.addEventListener('popstate', this._backHandler);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('popstate', this._backHandler);
+    });
+
     // Music
     this.selectBgm = this.sound.add('duel_select_bgm', { loop: true, volume: AUDIO_SETTINGS.musicVolume });
     this.selectBgm.play();
@@ -874,6 +882,14 @@ class DuelSelectScene extends Phaser.Scene {
     this.detailObjects = [this._detailBg, this._detailTitle, this._detailTraitName, this._detailTraitDesc, this._detailHint];
     this._detailPanX = panX; this._detailPanY = panY; this._detailPanW = panW; this._detailPanH = panH;
     this.updateDetail();
+
+    // Click outside the detail panel to close
+    this._detailClickOutside = (ptr) => {
+      if (ptr.x < panX || ptr.x > panX + panW || ptr.y < panY || ptr.y > panY + panH) {
+        this.hideDetail();
+      }
+    };
+    this.input.on('pointerdown', this._detailClickOutside);
   }
 
   updateDetail() {
@@ -898,6 +914,25 @@ class DuelSelectScene extends Phaser.Scene {
     this.detailVisible = false;
     this.detailObjects.forEach(o => o.destroy());
     this.detailObjects = [];
+    if (this._detailClickOutside) { this.input.off('pointerdown', this._detailClickOutside); this._detailClickOutside = null; }
+  }
+
+  _handleBack() {
+    window.history.pushState({ scene: 'DuelSelectScene' }, '');
+    if (this.confirmed) return;
+    if (this.detailVisible) { this.hideDetail(); return; }
+    if (this.phase === 'mode') { this.stopSelectMusic(); this.scene.start('MenuScene'); return; }
+    if (this.phase === 'p1') { this.showModeSelect(); return; }
+    if (this.phase === 'p1outfit') { this.showCharSelect('p1'); return; }
+    if (this.phase === 'p2') {
+      if (this.p1Char && this.p1Char.outfits.length > 1) { this.showOutfitSelect('p1'); return; }
+      this.showCharSelect('p1'); return;
+    }
+    if (this.phase === 'p2outfit') { this.showCharSelect('p2'); return; }
+    if (this.phase === 'stage') {
+      if (this.p2Char && this.p2Char.outfits.length > 1) { this.showOutfitSelect('p2'); return; }
+      this.showCharSelect('p2'); return;
+    }
   }
 
   update() {
