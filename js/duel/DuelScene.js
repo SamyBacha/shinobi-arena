@@ -97,9 +97,12 @@ class DuelScene extends Phaser.Scene {
       allKeys.forEach(key => {
         const loadKey = 'duel_' + tag + '_' + key;
         if (!this.textures.exists(loadKey)) {
-          const useOutfit = outfit && outfit.folder && outfitSheets.includes(key);
-          const base      = useOutfit ? outfitBase : defaultBase;
           const override  = outfitSheetOverrides[key];
+          // Use outfit folder only when the outfit explicitly overrides this sheet.
+          // If the outfit has a folder but no override for this key, fall back to
+          // the base character assets (avoids 404s for partial outfits like Magician).
+          const useOutfit = outfit && outfit.folder && outfitSheets.includes(key) && !!override;
+          const base      = useOutfit ? outfitBase : defaultBase;
           const sheetDef  = override || sheets[key];
           if (!sheetDef) return; // outfit-only sheet without base fallback — skip if no outfit
           // frameSize: outfit override > projectile override > charDef default
