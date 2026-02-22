@@ -150,7 +150,24 @@ class DuelSelectScene extends Phaser.Scene {
       const txt = this.add.text(w / 2, h * 0.45 + i * 70, label, {
         fontSize: '28px', fontFamily: 'monospace', color: '#888888',
         fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      txt.on('pointerover', () => {
+        if (this.confirmed) return;
+        this.selectedIndex = i; this.updateModeHighlight();
+      });
+      txt.on('pointerdown', () => {
+        if (this.confirmed) return;
+        this.selectedIndex = i; this.updateModeHighlight();
+        this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        if (i === 3) {
+          this.stopSelectMusic();
+          this.cameras.main.flash(200, 255, 255, 255);
+          this.time.delayedCall(250, () => { this.scene.start('TutorialScene'); });
+          return;
+        }
+        this.arcade = i === 0; this.vsAI = i <= 1;
+        this.showCharSelect('p1');
+      });
       this.modeTexts.push(txt);
       this.dynamicObjects.push(txt);
     });
@@ -295,10 +312,43 @@ class DuelSelectScene extends Phaser.Scene {
     arrowR.on('pointerdown', () => this._carouselNav(1));
     this.dynamicObjects.push(arrowR);
 
-    const hint = this.add.text(w / 2, h * 0.88, '←→ : Naviguer  |  ESPACE : Détails  |  ENTER : Valider  |  ESC : Retour', {
+    const hint = this.add.text(w / 2, h * 0.88, '←→ : Naviguer  |  ESPACE : Détails  |  ENTER / Clic : Valider  |  ESC : Retour', {
       fontSize: '13px', fontFamily: 'monospace', color: '#555577',
     }).setOrigin(0.5);
     this.dynamicObjects.push(hint);
+
+    // Click on center carousel zone to confirm selection
+    const confirmZone = this.add.zone(cx, cy, 200, 280)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    confirmZone.on('pointerdown', () => {
+      if (this.confirmed) return;
+      this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+      const chosen = this._carouselChars[this.selectedIndex];
+      if (this.phase === 'p1') {
+        this.p1Char = chosen; this.p1Outfit = null;
+        if (this.arcade) {
+          const allChars = { ...CHARACTERS, ...GHOST_CHARACTERS, ...HIDDEN_CHARACTERS };
+          const chosenKey = Object.keys(allChars).find(k => allChars[k] === chosen);
+          let arcadeOpponents;
+          if (CHEAT_SETTINGS.finalFight) {
+            arcadeOpponents = [HIDDEN_CHARACTERS.Wanderer_Magician];
+          } else {
+            arcadeOpponents = ARCADE_ORDER.filter(k => k !== chosenKey).map(k => allChars[k]);
+          }
+          this.p2Char = arcadeOpponents[0]; this.p2Outfit = null;
+          this.arcadeOpponents = arcadeOpponents;
+          this.launchDuel();
+        } else {
+          if (chosen.outfits.length > 1) { this.showOutfitSelect('p1'); }
+          else { this.showCharSelect('p2'); }
+        }
+      } else {
+        this.p2Char = chosen; this.p2Outfit = null;
+        if (chosen.outfits.length > 1) { this.showOutfitSelect('p2'); }
+        else { this.showStageSelect(); }
+      }
+    });
+    this.dynamicObjects.push(confirmZone);
 
     this._layoutCarousel();
   }
@@ -394,10 +444,27 @@ class DuelSelectScene extends Phaser.Scene {
     arrowR.on('pointerdown', () => this._outfitNav(1));
     this.dynamicObjects.push(arrowR);
 
-    const hint = this.add.text(w / 2, h * 0.88, '←→ : Naviguer  |  ENTER : Valider  |  ESC : Retour', {
+    const hint = this.add.text(w / 2, h * 0.88, '←→ : Naviguer  |  ENTER / Clic : Valider  |  ESC : Retour', {
       fontSize: '13px', fontFamily: 'monospace', color: '#555577',
     }).setOrigin(0.5);
     this.dynamicObjects.push(hint);
+
+    // Click center to confirm outfit
+    const confirmZone = this.add.zone(cx, cy, 200, 280)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    confirmZone.on('pointerdown', () => {
+      if (this.confirmed) return;
+      this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+      const chosen = this._outfitChars[this.selectedIndex];
+      if (this.phase === 'p1outfit') {
+        this.p1Outfit = chosen.folder ? chosen : null;
+        this.showCharSelect('p2');
+      } else {
+        this.p2Outfit = chosen.folder ? chosen : null;
+        this.showStageSelect();
+      }
+    });
+    this.dynamicObjects.push(confirmZone);
 
     this._layoutOutfitCarousel();
   }
@@ -697,10 +764,21 @@ class DuelSelectScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(10);
     this.dynamicObjects.push(this._stageCounter);
 
-    const hint = this.add.text(w / 2, h * 0.92, '← → : Naviguer  |  ENTER : Valider  |  ESC : Retour', {
+    const hint = this.add.text(w / 2, h * 0.92, '← → : Naviguer  |  ENTER / Clic : Valider  |  ESC : Retour', {
       fontSize: '13px', fontFamily: 'monospace', color: '#555577',
     }).setOrigin(0.5);
     this.dynamicObjects.push(hint);
+
+    // Click center thumbnail to confirm
+    const stageConfirmZone = this.add.zone(w / 2, cy, 280, 170)
+      .setInteractive({ useHandCursor: true }).setDepth(10);
+    stageConfirmZone.on('pointerdown', () => {
+      if (this.confirmed) return;
+      this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+      this.selectedStage = this.selectedIndex + 1;
+      this.launchDuel();
+    });
+    this.dynamicObjects.push(stageConfirmZone);
 
     this._layoutStageCarousel();
   }

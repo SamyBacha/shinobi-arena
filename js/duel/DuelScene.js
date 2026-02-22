@@ -613,7 +613,9 @@ class DuelScene extends Phaser.Scene {
     }
 
     // Continue prompt
-    const prompt = addTxt(w / 2, 670, 'Appuyez sur ENTER pour commencer', '16px', '#ffffff');
+    const prompt = addTxt(w / 2, 670, 'Cliquez ou appuyez sur ENTER pour commencer', '16px', '#ffffff');
+    prompt.setInteractive({ useHandCursor: true });
+    prompt.on('pointerdown', () => { if (this.turnPhase === 'rules') this.dismissRules(); });
     this.tweens.add({
       targets: prompt, alpha: 0.3, duration: 600, yoyo: true, repeat: -1,
     });
@@ -2298,7 +2300,16 @@ class DuelScene extends Phaser.Scene {
       const txt = this.add.text(w / 2, panY + 35 + i * 52, label, {
         fontSize: '26px', fontFamily: 'monospace', color: '#888888',
         fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
-      }).setOrigin(0.5).setDepth(402);
+      }).setOrigin(0.5).setDepth(402).setInteractive({ useHandCursor: true });
+      txt.on('pointerover', () => {
+        if (!this._defeatMenuActive) return;
+        this._defeatIndex = i; this._updateDefeatMenu();
+      });
+      txt.on('pointerdown', () => {
+        if (!this._defeatMenuActive) return;
+        this._defeatIndex = i; this._updateDefeatMenu();
+        this._confirmDefeatMenu();
+      });
       this._defeatObjects.push(txt);
       return txt;
     });
@@ -2397,6 +2408,16 @@ class DuelScene extends Phaser.Scene {
     const startY = h / 2 - (count - 1) * 24;
     this.pauseOptions.forEach((label, i) => {
       const txt = addTxt(w / 2, startY + i * 48, label, '22px', '#888888');
+      txt.setInteractive({ useHandCursor: true });
+      txt.on('pointerover', () => {
+        if (this.pausePhase !== 'main') return;
+        this.pauseIndex = i; this.updatePauseHighlight();
+      });
+      txt.on('pointerdown', () => {
+        if (this.pausePhase !== 'main') return;
+        this.pauseIndex = i; this.updatePauseHighlight();
+        this._confirmPauseSelection();
+      });
       this.pauseTexts.push(txt);
     });
 
@@ -2429,6 +2450,18 @@ class DuelScene extends Phaser.Scene {
     this.pauseMainHint = addTxt(w / 2, h / 2 + 280, '↑↓ : Naviguer  |  ENTER : Valider  |  ESC : Reprendre', '12px', '#555577');
 
     this.updatePauseHighlight();
+  }
+
+  _confirmPauseSelection() {
+    this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+    const action = this.pauseOptions[this.pauseIndex];
+    if (action === 'REPRENDRE')       { this.closePauseMenu(); }
+    else if (action === 'VOLUME')     { this.showPauseVolume(); }
+    else if (action === 'AIDE')       { this.showPauseHelp(); }
+    else if (action === 'PERSONNAGES'){ this.showPauseChars(); }
+    else if (action === 'RECOMMENCER'){ this.restartMatch(); }
+    else if (action === 'CHANGER PERSOS') { this.goToCharSelect(); }
+    else if (action === 'MENU PRINCIPAL') { this.goToMenu(); }
   }
 
   updatePauseHighlight() {

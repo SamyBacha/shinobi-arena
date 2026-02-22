@@ -68,7 +68,26 @@ class MenuScene extends Phaser.Scene {
       const txt = this.add.text(w / 2, h * 0.44 + i * 60, label, {
         fontSize: '32px', fontFamily: 'monospace', color: '#888888',
         fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      txt.on('pointerover', () => {
+        if (this.confirmed || this.cheatActive) return;
+        this.selectedIndex = i;
+        this.updateMenuHighlight();
+      });
+      txt.on('pointerdown', () => {
+        if (this.confirmed || this.cheatActive) return;
+        this.selectedIndex = i;
+        this.updateMenuHighlight();
+        this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        if (i === 2) { this.showPersonnagesMenu(); return; }
+        if (i === 3) { this.showOptionsMenu(); return; }
+        this.confirmed = true;
+        if (this.menuBgm && this.menuBgm.isPlaying) this.menuBgm.stop();
+        this.cameras.main.flash(200, 255, 255, 255);
+        this.time.delayedCall(300, () => {
+          this.scene.start(i === 0 ? 'SelectScene' : 'DuelSelectScene');
+        });
+      });
       this.optionTexts.push(txt);
     });
 
@@ -429,6 +448,70 @@ class MenuScene extends Phaser.Scene {
     this.drawTouchBtnsCheckbox();
     this.drawGraphicsControls();
     this.updateOptionsArrow();
+
+    // Mouse zones for each option row
+    // 0=Musique, 1=Effets, 2=Aide, 3=Boutons tactiles, 4=Lissage, 5=Vignette, 6=Saturation, 7=Scanlines
+    const optRowY = [
+      h / 2 - 198, h / 2 - 140, h / 2 - 62, h / 2 - 4,
+      h / 2 + 90,  h / 2 + 148, h / 2 + 206, h / 2 + 264,
+    ];
+    optRowY.forEach((ry, idx) => {
+      const zone = this.add.zone(w / 2, ry, 500, 36)
+        .setInteractive({ useHandCursor: true }).setDepth(503);
+      this.optionsObjects.push(zone);
+      zone.on('pointerover', () => {
+        if (this.optionsIndex !== idx) {
+          this.optionsIndex = idx;
+          this.updateOptionsArrow();
+        }
+      });
+      zone.on('pointerdown', (ptr) => {
+        this.optionsIndex = idx;
+        this.updateOptionsArrow();
+        // Sliders: left half = decrease, right half = increase
+        const isLeft  = ptr.x < w / 2;
+        const isRight = !isLeft;
+        if (idx <= 1) {
+          // Audio sliders
+          const step = 0.05;
+          if (isRight) {
+            if (idx === 0) AUDIO_SETTINGS.musicVolume = Math.min(1, AUDIO_SETTINGS.musicVolume + step);
+            else AUDIO_SETTINGS.sfxVolume = Math.min(1, AUDIO_SETTINGS.sfxVolume + step);
+          } else {
+            if (idx === 0) AUDIO_SETTINGS.musicVolume = Math.max(0, AUDIO_SETTINGS.musicVolume - step);
+            else AUDIO_SETTINGS.sfxVolume = Math.max(0, AUDIO_SETTINGS.sfxVolume - step);
+          }
+          this.drawOptionsBars(); saveSettings();
+          if (this.menuBgm) this.menuBgm.setVolume(AUDIO_SETTINGS.musicVolume);
+        } else if (idx === 2) {
+          DISPLAY_SETTINGS.showHints = !DISPLAY_SETTINGS.showHints;
+          this.drawHintCheckbox(); saveSettings();
+          this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        } else if (idx === 3) {
+          DISPLAY_SETTINGS.touchButtons = !DISPLAY_SETTINGS.touchButtons;
+          this.drawTouchBtnsCheckbox(); saveSettings();
+          this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        } else if (idx === 4) {
+          GRAPHICS_SETTINGS.smoothing = !GRAPHICS_SETTINGS.smoothing;
+          this.drawGraphicsControls(); saveSettings(); applyGraphicsSettings(this);
+          this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        } else if (idx === 5) {
+          const step = 0.05;
+          if (isRight) GRAPHICS_SETTINGS.vignette = Math.min(1, GRAPHICS_SETTINGS.vignette + step);
+          else         GRAPHICS_SETTINGS.vignette = Math.max(0, GRAPHICS_SETTINGS.vignette - step);
+          this.drawGraphicsControls(); saveSettings(); applyGraphicsSettings(this);
+        } else if (idx === 6) {
+          const step = 0.1;
+          if (isRight) GRAPHICS_SETTINGS.saturation = Math.min(1,  +(GRAPHICS_SETTINGS.saturation + step).toFixed(1));
+          else         GRAPHICS_SETTINGS.saturation = Math.max(-1, +(GRAPHICS_SETTINGS.saturation - step).toFixed(1));
+          this.drawGraphicsControls(); saveSettings(); applyGraphicsSettings(this);
+        } else if (idx === 7) {
+          GRAPHICS_SETTINGS.scanlines = !GRAPHICS_SETTINGS.scanlines;
+          this.drawGraphicsControls(); saveSettings(); applyGraphicsSettings(this);
+          this.sound.play('menu_click', { volume: AUDIO_SETTINGS.sfxVolume });
+        }
+      });
+    });
   }
 
   // ---- Personnages overlay ----

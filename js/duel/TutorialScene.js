@@ -83,14 +83,22 @@ class TutorialScene extends Phaser.Scene {
     }).setOrigin(0.5, 0).setDepth(11);
 
     // ── Prompts ──
-    this.add.text(w / 2, panelY + panelH - 42, 'ENTER : Commencer le tutoriel', {
+    const startTxt = this.add.text(w / 2, panelY + panelH - 42, 'ENTER : Commencer le tutoriel', {
       fontSize: '16px', fontFamily: 'monospace', color: '#44ff88',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0).setDepth(11);
+    startTxt.setInteractive({ useHandCursor: true });
+    startTxt.on('pointerover', () => startTxt.setColor('#aaffcc'));
+    startTxt.on('pointerout',  () => startTxt.setColor('#44ff88'));
+    startTxt.on('pointerdown', () => this._startTutorial());
 
-    this.add.text(w / 2, panelY + panelH - 18, 'ESC : Retour au menu', {
+    const backTxt = this.add.text(w / 2, panelY + panelH - 18, 'ESC : Retour au menu', {
       fontSize: '12px', fontFamily: 'monospace', color: '#667799',
     }).setOrigin(0.5, 0).setDepth(11);
+    backTxt.setInteractive({ useHandCursor: true });
+    backTxt.on('pointerover', () => backTxt.setColor('#aabbcc'));
+    backTxt.on('pointerout',  () => backTxt.setColor('#667799'));
+    backTxt.on('pointerdown', () => this.scene.start('DuelSelectScene'));
 
     // ── Keys ──
     const K = Phaser.Input.Keyboard.KeyCodes;
@@ -108,16 +116,20 @@ class TutorialScene extends Phaser.Scene {
     }
 
     if (Phaser.Input.Keyboard.JustDown(this._keyEnter)) {
-      const fighterDef = Object.values(CHARACTERS).find(c => c.folder === 'Fighter');
-      const stageIdx   = STAGES.findIndex(s => s.id === 'old_dojo') + 1;
-      this.scene.start('DuelScene', {
-        p1: fighterDef,
-        p2: fighterDef,
-        p2Color: '#ff4422',
-        vsAI: true,
-        stageIndex: stageIdx || 1,
-        tutorialMode: true,
-      });
+      this._startTutorial();
     }
+  }
+
+  _startTutorial() {
+    const fighterDef = Object.values(CHARACTERS).find(c => c.folder === 'Fighter');
+    const stageIdx   = STAGES.findIndex(s => s.id === 'old_dojo') + 1;
+    this.scene.start('DuelScene', {
+      p1: fighterDef,
+      p2: fighterDef,
+      p2Color: '#ff4422',
+      vsAI: true,
+      stageIndex: stageIdx || 1,
+      tutorialMode: true,
+    });
   }
 }
